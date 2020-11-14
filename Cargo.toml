@@ -9,3 +9,7 @@ edition = "2018"
 ark-ff = { git = "https://github.com/arkworks-rs/algebra", default-features = true }
 ark-ec = { git = "https://github.com/arkworks-rs/algebra", default-features = true }
 ark-std = { git = "https://github.com/arkworks-rs/utils", default-features = true }
+ark-poly = { git = "https://github.com/arkworks-rs/algebra", default-features = false }
+
+
+rand_core = { version = "0.5" }
