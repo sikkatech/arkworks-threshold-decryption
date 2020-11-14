@@ -1,0 +1,11 @@
+[package]
+name = "arkworks-threshold-decryption"
+version = "0.0.1"
+authors = ["ValarDragon <dev@sikka.tech>"]
+edition = "2018"
+
+
+[dependencies]
+ark-ff = { git = "https://github.com/arkworks-rs/algebra", default-features = true }
+ark-ec = { git = "https://github.com/arkworks-rs/algebra", default-features = true }
+ark-std = { git = "https://github.com/arkworks-rs/utils", default-features = true }
