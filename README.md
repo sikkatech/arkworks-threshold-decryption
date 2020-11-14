@@ -1,12 +1,14 @@
 # arkworks-threshold-decryption
 Pairing based threshold decryption library
 
-This repository implements the threshold decryption scheme of [BZ03](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.119.1717&rep=rep1&type=pdf). We implement a further optimization to this scheme to allow for 'additional data' to be augmented to the ciphertext, essentially achieving a threshold-decryptable AEAD scheme.
+This repository implements the threshold decryption scheme of [BZ03](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.119.1717&rep=rep1&type=pdf). We implement two further optimizations to this scheme. 
+One allows for 'additional data' to be augmented to the ciphertext, essentially achieving a threshold-decryptable AEAD scheme.
+The second allows for batching the decryption shares together, and to have the end-verifier only need to verify the combined decryption share.
 
 TODO:
 - [ ] Have Sage Prototypes
 - [ ] Figure out how to nicely template curve+AEAD choice.
-- [ ] Implement 'Dummy Key Generation'
+- [x] Implement 'Dummy Key Generation'
 - [ ] Implement 'Threshold encrypt'
 - [ ] Implement Check-ciphertext
 - [ ] Implement Check-decryption share
@@ -14,6 +16,7 @@ TODO:
 - [ ] Implement combining decryption shares
 - [ ] Implement a method to guarantee that a plaintext is truly the decryption of the ciphertext
 - [ ] Write proofs of missing components from the original paper
+- [ ] Prove our custom decryption share verification system
 - [ ] Learn how to zeroize secrets in Rust
 - [ ] Talk to Tony for bug things
 
