@@ -11,5 +11,7 @@ ark-ec = { git = "https://github.com/arkworks-rs/algebra", default-features = tr
 ark-std = { git = "https://github.com/arkworks-rs/utils", default-features = true }
 ark-poly = { git = "https://github.com/arkworks-rs/algebra", default-features = false }
 
+bls-crypto = { git = "https://github.com/sikkatech/celo-bls-snark-rs", branch="make_hashes_have_new_fn", default-features = false }
 
+chacha20 = { version = "0.6.0" }
 rand_core = { version = "0.5" }
