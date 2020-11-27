@@ -6,15 +6,17 @@ One allows for 'additional data' to be augmented to the ciphertext, essentially 
 The second allows for batching the decryption shares together, and to have the end-verifier only need to verify the combined decryption share.
 
 TODO:
-- [ ] Have Sage Prototypes
+
 - [ ] Figure out how to nicely template curve+AEAD choice.
+- [ ] API updates to Celo's Hash to Curve
 - [x] Implement 'Dummy Key Generation'
-- [ ] Implement 'Threshold encrypt'
-- [ ] Implement Check-ciphertext
+- [X] Implement 'Threshold encrypt'
+- [X] Implement Check-ciphertext
 - [ ] Implement Check-decryption share
-- [ ] Implement creating a decryption share
+- [X] Implement creating a decryption share
 - [ ] Implement combining decryption shares
 - [ ] Implement a method to guarantee that a plaintext is truly the decryption of the ciphertext
+- [ ] Implement serialization methods for structs
 - [ ] Write proofs of missing components from the original paper
 - [ ] Prove our custom decryption share verification system
 - [ ] Learn how to zeroize secrets in Rust

@@ -6,6 +6,10 @@ edition = "2018"
 
 
 [dependencies]
+
+log = "0.4.6"
+thiserror = "1.0.14"
+
 ark-ff = { git = "https://github.com/arkworks-rs/algebra", default-features = true }
 ark-ec = { git = "https://github.com/arkworks-rs/algebra", default-features = true }
 ark-std = { git = "https://github.com/arkworks-rs/utils", default-features = true }
