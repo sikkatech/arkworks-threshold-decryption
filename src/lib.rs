@@ -103,8 +103,11 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         // TODO: Use stream cipher Trait
         let mut prf_key = Vec::new();
         stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
-        let nonce = Nonce::from_slice(b"secret nonce");
-        let mut cipher = ChaCha20::new(Key::from_slice(&prf_key), nonce);
+
+        // This nonce doesn't matter, as we never have key re-use.
+        // We keep it fixed to minimize the data transmitted.
+        let chacha_nonce = Nonce::from_slice(b"secret nonce");
+        let mut cipher = ChaCha20::new(Key::from_slice(&prf_key), chacha_nonce);
 
         // Encrypt the message
         let mut stream_ciphertext = msg.to_vec();
@@ -164,8 +167,28 @@ impl<P: ThresholdEncryptionParameters> PrivkeyShare<P>
 
 #[cfg(test)]
 mod tests {
+    use crate::key_generation::*;
+    use crate::*;
+    use ark_std::test_rng;
+    use ark_bls12_377::*;
+    use ark_ec::SWModelParameters;
+    use ark_ec::bls12::Bls12Parameters;
+
+    pub struct testing_parameters {}
+
+    // impl ThresholdEncryptionParameters for testing_parameters {
+    //     type E = ark_bls12_377::Bls12_377;
+    //     type H = bls_crypto::hash_to_curve::try_and_increment::TryAndIncrement::<
+    //         bls_crypto::hashers::DirectHasher,
+    //         <ark_bls12_377::Parameters as Bls12Parameters>::G2Parameters,
+    //         >;
+    // }
     #[test]
-    fn it_works() {
+    fn completeness_test() {
+        let mut rng = test_rng();
+        let threshold = 3;
+        let num_keys = 5;
+        // let (epk, svp, privkeys) = generate_keys::<>(threshold, num_keys, &mut rng);
         assert_eq!(2 + 2, 4);
     }
 }

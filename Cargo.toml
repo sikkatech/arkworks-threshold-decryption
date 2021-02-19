@@ -14,6 +14,7 @@ ark-ff = { git = "https://github.com/arkworks-rs/algebra", default-features = tr
 ark-ec = { git = "https://github.com/arkworks-rs/algebra", default-features = true }
 ark-std = { git = "https://github.com/arkworks-rs/utils", default-features = true }
 ark-poly = { git = "https://github.com/arkworks-rs/algebra", default-features = false }
+ark-bls12-377 = { git = "https://github.com/arkworks-rs/curves", default-features = true }
 
 bls-crypto = { git = "https://github.com/sikkatech/celo-bls-snark-rs", branch="make_hashes_have_new_fn", default-features = false }
 
