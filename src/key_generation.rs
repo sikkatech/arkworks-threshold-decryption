@@ -12,7 +12,7 @@ pub fn generate_keys<P: ThresholdEncryptionParameters, R: RngCore> (
     (EncryptionPubkey<P>, ShareVerificationPubkey<P>, Vec<PrivkeyShare<P>>)
 {
     assert!(num_keys >= threshold);
-    let generator = G1::<P>::prime_subgroup_generator();
+    let generator = G2::<P>::prime_subgroup_generator();
 
     // Generate random degree t polynomial
     let threshold_poly = DensePolynomial::<Fr<P>>::rand(threshold - 1, rng);
@@ -24,7 +24,7 @@ pub fn generate_keys<P: ThresholdEncryptionParameters, R: RngCore> (
     let encryption_pubkey = EncryptionPubkey::<P>{ key: generator.mul(master_privkey).into() };
 
     // Create per-validator pubkey shares, and their privkey shares
-    let mut pubkey_shares : Vec<G1<P>> = vec![];
+    let mut pubkey_shares : Vec<G2<P>> = vec![];
     let mut privkeys = vec![];
     for i in 1..=num_keys 
     {

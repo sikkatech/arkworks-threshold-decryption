@@ -13,28 +13,28 @@ use thiserror::Error;
 
 pub mod key_generation;
 
-pub trait ThresholdEncryptionParameters {
-    type E: PairingEngine;
-    type H: HashToCurve<Output=<<Self as ThresholdEncryptionParameters>::E as PairingEngine>::G2Affine>;
-}
-
 type G1<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::G1Affine;
 type G2<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::G2Affine;
 type Fqk<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fqk;
 type Fr<P: ThresholdEncryptionParameters> = <<P::E as PairingEngine>::G1Affine as AffineCurve>::ScalarField;
 
+pub trait ThresholdEncryptionParameters {
+    type E: PairingEngine;
+    type H: HashToCurve<Output= G2<Self>>;
+}
+
 pub struct EncryptionPubkey<P: ThresholdEncryptionParameters> {
-    pub key : G1<P>,
+    pub key : G2<P>,
 }
 
 pub struct ShareVerificationPubkey<P: ThresholdEncryptionParameters> {
-    pub decryptor_pubkeys : Vec<G1<P>>,
+    pub decryptor_pubkeys : Vec<G2<P>>,
 }
 
 pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
     pub index : usize,
     pub privkey : Fr<P>,
-    pub pubkey : G1<P>,
+    pub pubkey : G2<P>,
 }
 
 pub struct Ciphertext<P: ThresholdEncryptionParameters> {
@@ -165,6 +165,25 @@ impl<P: ThresholdEncryptionParameters> PrivkeyShare<P>
     }
 }
 
+impl<P: ThresholdEncryptionParameters> DecryptionShare<P>
+{
+    pub fn verify_share(&self, c : Ciphertext::<P>, additional_data: &[u8], vpk: ShareVerificationPubkey<P>) -> bool
+    where <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G2Prepared: From<<<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Affine>
+    {
+        let res = c.check_ciphertext_validity(additional_data);
+        if res == false {
+            return false
+        }
+
+        let g_inv = -G1::<P>::prime_subgroup_generator();
+        let pairing_prod_result = P::E::product_of_pairings(&[
+            (g_inv.into(), self.decryption_share.into()),
+            (c.nonce.into(), vpk.decryptor_pubkeys[self.decryptor_index].into()),
+        ]);
+        pairing_prod_result == Fqk::<P>::one()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::key_generation::*;
@@ -173,22 +192,25 @@ mod tests {
     use ark_bls12_377::*;
     use ark_ec::SWModelParameters;
     use ark_ec::bls12::Bls12Parameters;
+    use ark_ec::short_weierstrass_jacobian::GroupAffine;
+    // use rand::rngs::StdRng;
 
-    pub struct testing_parameters {}
+    pub struct TestingParameters {}
 
-    // impl ThresholdEncryptionParameters for testing_parameters {
+    // impl ThresholdEncryptionParameters for TestingParameters {
     //     type E = ark_bls12_377::Bls12_377;
     //     type H = bls_crypto::hash_to_curve::try_and_increment::TryAndIncrement::<
     //         bls_crypto::hashers::DirectHasher,
     //         <ark_bls12_377::Parameters as Bls12Parameters>::G2Parameters,
     //         >;
     // }
+
     #[test]
     fn completeness_test() {
         let mut rng = test_rng();
         let threshold = 3;
         let num_keys = 5;
-        // let (epk, svp, privkeys) = generate_keys::<>(threshold, num_keys, &mut rng);
+        // let (epk, svp, privkeys) = generate_keys::<TestingParameters, StdRng>(threshold, num_keys, &mut rng);
         assert_eq!(2 + 2, 4);
     }
 }

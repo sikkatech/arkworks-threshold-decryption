@@ -14,7 +14,7 @@ TODO:
 - [x] Implement 'Dummy Key Generation'
 - [X] Implement 'Threshold encrypt'
 - [X] Implement Check-ciphertext
-- [ ] Implement Check-decryption share
+- [X] Implement Check-decryption share
 - [X] Implement creating a decryption share
 - [ ] Implement Lagrange coefficient generation
 - [ ] Upstream Lagrange coefficient generation
