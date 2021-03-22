@@ -192,7 +192,8 @@ impl<P: ThresholdEncryptionParameters> Ciphertext<P> {
         ]);
 
         // Check that the result equals one
-        pairing_prod_result == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
+        pairing_prod_result
+            == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
     }
 }
 
@@ -239,10 +240,35 @@ impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
                 vpk.decryptor_pubkeys[self.decryptor_index].into(),
             ),
         ]);
-        pairing_prod_result == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
+        pairing_prod_result
+            == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
         //Fqk::<P>::one()
     }
 }
+
+pub fn share_combine<P: ThresholdEncryptionParameters>(
+    plaintext: &mut [u8],
+    c: Ciphertext<P>,
+    additional_data: &[u8],
+    shares: Vec<DecryptionShare<P>>,
+) -> Result<(), ThresholdEncryptionError> {
+    let res = c.check_ciphertext_validity(additional_data);
+    if res == false {
+        return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
+    }
+
+    let stream_cipher_key_curve_elem = ;/*Lagrange on shares here*/
+    let mut prf_key = Vec::new();
+    stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
+
+    let chacha_nonce = Nonce::from_slice(b"secret nonce");
+    let mut cipher = ChaCha20::new(Key::from_slice(&prf_key), chacha_nonce);
+
+    cipher.apply_keystream(&mut c.ciphertext);
+
+    Ok(())
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -280,9 +306,13 @@ mod tests {
         let ad: &[u8] = "".as_bytes();
 
         let ciphertext = epk.encrypt_msg(msg, ad, &mut rng);
-        let sh0 = privkeys[0].create_share(ciphertext, ad).unwrap();
+
+        let dec_shares: Vec<DecryptionShare<TestingParameters>>;
+        for i in 1..=num_keys {
+            dec_shares[i] = privkeys[i].create_share(ciphertext, ad).unwrap();
+        }
         // assert!(
-            sh0.verify_share(ciphertext, ad, svp);
-            // );
+        dec_shares[0].verify_share(ciphertext, ad, svp);
+        // );
     }
 }
