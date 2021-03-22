@@ -1,40 +1,83 @@
 #![allow(type_alias_bounds)]
+// use ark_ec::{AffineCurve as ark_AffineCurve, PairingEngine as ark_PairingEngine};
 use ark_ec::{AffineCurve, PairingEngine};
-use ark_ff::{Field, One, ToBytes, UniformRand};
+use ark_ff::{One, ToBytes, UniformRand};
+use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
+use chacha20::{ChaCha20, Key, Nonce};
 use rand_core::RngCore;
 use std::vec;
-use chacha20::{ChaCha20, Key, Nonce};
-use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
 
-use bls_crypto::hash_to_curve::HashToCurve;
+// use bls_crypto::hash_to_curve::HashToCurve;
 
 use log::error;
 use thiserror::Error;
 
+// use algebra::{PairingEngine, AffineCurve};
+
+mod hash_to_curve;
 pub mod key_generation;
 
 type G1<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::G1Affine;
 type G2<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::G2Affine;
 type Fqk<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fqk;
-type Fr<P: ThresholdEncryptionParameters> = <<P::E as PairingEngine>::G1Affine as AffineCurve>::ScalarField;
+type Fr<P: ThresholdEncryptionParameters> =
+    <<P::E as PairingEngine>::G1Affine as AffineCurve>::ScalarField;
+
+use ark_serialize::CanonicalDeserialize;
+use hex;
+
+// trait HashToCurve : Sized {
+//     // fn new() -> Self;
+//     fn hash(
+//         &self,
+//         domain: &[u8],
+//         message: &[u8],
+//     ) -> ark_bls12_381::G2Affine;
+// }
+
+// struct Hasher;
+// impl HashToCurve for Hasher {
+//     fn hash(
+//         &self,
+//         domain: &[u8],
+//         message: &[u8],
+//     ) -> ark_bls12_381::G2Affine
+//     {
+//         let mut expected_compressed = [0u8; 96];
+//         let expected_hex_string = "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903";
+//         hex::decode_to_slice(expected_hex_string, &mut expected_compressed).expect("Failed to decode hex");
+//         let expected = <ark_bls12_381::G2Affine as CanonicalDeserialize>::deserialize(&expected_compressed[..]).unwrap();
+//         expected
+//     }
+// }
+
+pub fn mock_hash<T: CanonicalDeserialize>(/*message: &[u8]*/) -> T {
+    let mut expected_compressed = [0u8; 96];
+    let expected_hex_string = "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903";
+    hex::decode_to_slice(expected_hex_string, &mut expected_compressed)
+        .expect("Failed to decode hex");
+    let expected = <T as CanonicalDeserialize>::deserialize(&expected_compressed[..]).unwrap();
+    expected
+}
 
 pub trait ThresholdEncryptionParameters {
     type E: PairingEngine;
-    type H: HashToCurve<Output= G2<Self>>;
+    // type H: HashToCurve<Output= G2<Self>>; // XXX: define my hashtocurve, change it here
+    // type H: HashToCurve;
 }
 
 pub struct EncryptionPubkey<P: ThresholdEncryptionParameters> {
-    pub key : G2<P>,
+    pub key: G2<P>,
 }
 
 pub struct ShareVerificationPubkey<P: ThresholdEncryptionParameters> {
-    pub decryptor_pubkeys : Vec<G2<P>>,
+    pub decryptor_pubkeys: Vec<G2<P>>,
 }
 
 pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
-    pub index : usize,
-    pub privkey : Fr<P>,
-    pub pubkey : G2<P>,
+    pub index: usize,
+    pub privkey: Fr<P>,
+    pub pubkey: G2<P>,
 }
 
 pub struct Ciphertext<P: ThresholdEncryptionParameters> {
@@ -43,8 +86,7 @@ pub struct Ciphertext<P: ThresholdEncryptionParameters> {
     pub auth_tag: G2<P>,
 }
 
-pub struct DecryptionShare<P: ThresholdEncryptionParameters> 
-{
+pub struct DecryptionShare<P: ThresholdEncryptionParameters> {
     pub decryptor_index: usize,
     pub decryption_share: G1<P>,
 }
@@ -63,17 +105,18 @@ pub enum ThresholdEncryptionError {
     /// Hashing to curve failed
     #[error("Could not hash to curve")]
     HashToCurveError,
-
     // Serialization error in Zexe
     // #[error(transparent)]
     // SerializationError(#[from] algebra::SerializationError),
 }
 
-/// Computes the ROM-heuristic hash `H(U, V, additional data) -> G2`, 
+/// Computes the ROM-heuristic hash `H(U, V, additional data) -> G2`,
 /// used to construct the authentication tag for the ciphertext.
 fn construct_tag_hash<P: ThresholdEncryptionParameters>(
-    u: G1<P>, stream_ciphertext: &[u8], additional_data: &[u8]) -> G2<P>
-{
+    u: G1<P>,
+    stream_ciphertext: &[u8],
+    additional_data: &[u8],
+) -> G2<P> {
     // Encode the data to be hashed as U || V || additional data
     // TODO: Length prefix V
     let mut hash_input = Vec::<u8>::new();
@@ -81,16 +124,21 @@ fn construct_tag_hash<P: ThresholdEncryptionParameters>(
     hash_input.extend_from_slice(stream_ciphertext);
     hash_input.extend_from_slice(additional_data);
 
-    let hasher = P::H::new().unwrap();
-    let domain = &b"auth_tag"[..];
-    let tag_hash = hasher.hash(domain, &hash_input).unwrap();
+    // let hasher = P::H::new().unwrap();
+    // let domain = &b"auth_tag"[..];
+    // XXX: for now just use the test vector for input 'abc'. use CanonicalDeserialize::deserialize
+    // let tag_hash = hasher.hash(domain, &hash_input).unwrap();
+    let tag_hash = mock_hash::<G2<P>>(/*&hash_input*/);
     tag_hash
 }
 
-impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> { 
-    pub fn encrypt_msg<R: RngCore>
-        (&self, msg: &[u8], additional_data: &[u8], rng: &mut R) -> Ciphertext<P>
-    {
+impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
+    pub fn encrypt_msg<R: RngCore>(
+        &self,
+        msg: &[u8],
+        additional_data: &[u8],
+        rng: &mut R,
+    ) -> Ciphertext<P> {
         // TODO: Come back and rename these
         let g1_generator = G1::<P>::prime_subgroup_generator();
         let r = Fr::<P>::rand(rng);
@@ -119,17 +167,18 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         let tag_hash = construct_tag_hash::<P>(u, msg, additional_data);
         let auth_tag = tag_hash.mul(r).into();
 
-        Ciphertext::<P>{nonce: u, ciphertext: stream_ciphertext, auth_tag}
+        Ciphertext::<P> {
+            nonce: u,
+            ciphertext: stream_ciphertext,
+            auth_tag,
+        }
     }
 }
 
-impl<P: ThresholdEncryptionParameters> Ciphertext<P> 
-{
+impl<P: ThresholdEncryptionParameters> Ciphertext<P> {
     // TODO: Change this output to an enum
     /// Check that the provided ciphertext is validly constructed, and therefore is decryptable.
-    pub fn check_ciphertext_validity(
-        &self, additional_data: &[u8]) -> bool 
-    {
+    pub fn check_ciphertext_validity(&self, additional_data: &[u8]) -> bool {
         // The authentication tag is valid iff e(nonce, tag hash) = e(g, auth tag)
         // Notice that this is equivalent to checking the following:
         // `e(nonce, tag hash) * e(g, auth tag)^{-1} = 1`
@@ -143,16 +192,17 @@ impl<P: ThresholdEncryptionParameters> Ciphertext<P>
         ]);
 
         // Check that the result equals one
-        pairing_prod_result == Fqk::<P>::one()
+        pairing_prod_result == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
     }
 }
 
 // TODO: Learn how rust crypto libraries handle private keys
-impl<P: ThresholdEncryptionParameters> PrivkeyShare<P>
-{
+impl<P: ThresholdEncryptionParameters> PrivkeyShare<P> {
     pub fn create_share(
-        &self, c : Ciphertext::<P>, additional_data: &[u8]) -> Result<DecryptionShare<P>, ThresholdEncryptionError>
-    {
+        &self,
+        c: Ciphertext<P>,
+        additional_data: &[u8],
+    ) -> Result<DecryptionShare<P>, ThresholdEncryptionError> {
         let res = c.check_ciphertext_validity(additional_data);
         if res == false {
             return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
@@ -165,52 +215,74 @@ impl<P: ThresholdEncryptionParameters> PrivkeyShare<P>
     }
 }
 
-impl<P: ThresholdEncryptionParameters> DecryptionShare<P>
-{
-    pub fn verify_share(&self, c : Ciphertext::<P>, additional_data: &[u8], vpk: ShareVerificationPubkey<P>) -> bool
-    where <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G2Prepared: From<<<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Affine>
+impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
+    pub fn verify_share(
+        &self,
+        c: Ciphertext<P>,
+        additional_data: &[u8],
+        vpk: ShareVerificationPubkey<P>,
+    ) -> bool
+    where
+        <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G2Prepared:
+            From<<<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Affine>,
     {
         let res = c.check_ciphertext_validity(additional_data);
         if res == false {
-            return false
+            return false;
         }
 
         let g_inv = -G1::<P>::prime_subgroup_generator();
         let pairing_prod_result = P::E::product_of_pairings(&[
             (g_inv.into(), self.decryption_share.into()),
-            (c.nonce.into(), vpk.decryptor_pubkeys[self.decryptor_index].into()),
+            (
+                c.nonce.into(),
+                vpk.decryptor_pubkeys[self.decryptor_index].into(),
+            ),
         ]);
-        pairing_prod_result == Fqk::<P>::one()
+        pairing_prod_result == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
+        //Fqk::<P>::one()
     }
 }
 
 #[cfg(test)]
 mod tests {
+
     use crate::key_generation::*;
     use crate::*;
     use ark_std::test_rng;
-    use ark_bls12_377::*;
-    use ark_ec::SWModelParameters;
-    use ark_ec::bls12::Bls12Parameters;
-    use ark_ec::short_weierstrass_jacobian::GroupAffine;
-    // use rand::rngs::StdRng;
+
+    // use algebra::curves::bls12::Bls12Parameters;// as algebra_bls12_params;
+    // use ark_ec::bls12::Bls12Parameters;
 
     pub struct TestingParameters {}
 
-    // impl ThresholdEncryptionParameters for TestingParameters {
-    //     type E = ark_bls12_377::Bls12_377;
-    //     type H = bls_crypto::hash_to_curve::try_and_increment::TryAndIncrement::<
-    //         bls_crypto::hashers::DirectHasher,
-    //         <ark_bls12_377::Parameters as Bls12Parameters>::G2Parameters,
-    //         >;
-    // }
+    impl ThresholdEncryptionParameters for TestingParameters {
+        type E = ark_bls12_381::Bls12_381;
+        // type E = Bls12_377;
+        // type H = bls_crypto::hash_to_curve::try_and_increment::TryAndIncrement::<bls_crypto::hashers::DirectHasher,
+        // <ark_bls12_381::Parameters as Bls12Parameters>::G2Parameters
+        // <algebra_bls12_params as Bls12Parameters>::G2Parameters
+        // <Parameters as Bls12Parameters>::G2Parameters,
+        // >; // XXX: use my hashtocurve here
+        // type H = Hasher;
+    }
 
     #[test]
     fn completeness_test() {
         let mut rng = test_rng();
         let threshold = 3;
         let num_keys = 5;
-        // let (epk, svp, privkeys) = generate_keys::<TestingParameters, StdRng>(threshold, num_keys, &mut rng);
-        assert_eq!(2 + 2, 4);
+        let (epk, svp, privkeys) = generate_keys::<TestingParameters, ark_std::rand::rngs::StdRng>(
+            threshold, num_keys, &mut rng,
+        );
+
+        let msg: &[u8] = "abc".as_bytes();
+        let ad: &[u8] = "".as_bytes();
+
+        let ciphertext = epk.encrypt_msg(msg, ad, &mut rng);
+        let sh0 = privkeys[0].create_share(ciphertext, ad).unwrap();
+        // assert!(
+            sh0.verify_share(ciphertext, ad, svp);
+            // );
     }
 }
