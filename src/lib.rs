@@ -7,6 +7,7 @@ use chacha20::{ChaCha20, Key, Nonce};
 use rand_core::RngCore;
 use std::vec;
 
+
 // use bls_crypto::hash_to_curve::HashToCurve;
 
 use log::error;
@@ -14,14 +15,15 @@ use thiserror::Error;
 
 // use algebra::{PairingEngine, AffineCurve};
 
+pub mod poly;
 mod hash_to_curve;
 pub mod key_generation;
 
 type G1<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::G1Affine;
 type G2<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::G2Affine;
-type Fqk<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fqk;
-type Fr<P: ThresholdEncryptionParameters> =
-    <<P::E as PairingEngine>::G1Affine as AffineCurve>::ScalarField;
+type Fr<P: ThresholdEncryptionParameters> =  <<P::E as PairingEngine>::G1Affine as AffineCurve>::ScalarField;
+// type Fqk<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fqk;
+// type Fr<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fr;
 
 use ark_serialize::CanonicalDeserialize;
 use hex;
@@ -62,8 +64,7 @@ pub fn mock_hash<T: CanonicalDeserialize>(/*message: &[u8]*/) -> T {
 
 pub trait ThresholdEncryptionParameters {
     type E: PairingEngine;
-    // type H: HashToCurve<Output= G2<Self>>; // XXX: define my hashtocurve, change it here
-    // type H: HashToCurve;
+    // type H: HashToCurve<Output= G2<Self>>;
 }
 
 pub struct EncryptionPubkey<P: ThresholdEncryptionParameters> {
@@ -81,14 +82,14 @@ pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
 }
 
 pub struct Ciphertext<P: ThresholdEncryptionParameters> {
-    pub nonce: G1<P>,
-    pub ciphertext: Vec<u8>,
-    pub auth_tag: G2<P>,
+    pub nonce: G1<P>, // U
+    pub ciphertext: Vec<u8>, // V
+    pub auth_tag: G2<P>, // W
 }
 
 pub struct DecryptionShare<P: ThresholdEncryptionParameters> {
-    pub decryptor_index: usize,
-    pub decryption_share: G1<P>,
+    pub decryptor_index: usize, // i
+    pub decryption_share: G1<P>, // U_i = x_i*U
 }
 
 #[derive(Debug, Error)]
@@ -126,7 +127,6 @@ fn construct_tag_hash<P: ThresholdEncryptionParameters>(
 
     // let hasher = P::H::new().unwrap();
     // let domain = &b"auth_tag"[..];
-    // XXX: for now just use the test vector for input 'abc'. use CanonicalDeserialize::deserialize
     // let tag_hash = hasher.hash(domain, &hash_input).unwrap();
     let tag_hash = mock_hash::<G2<P>>(/*&hash_input*/);
     tag_hash
@@ -201,7 +201,7 @@ impl<P: ThresholdEncryptionParameters> Ciphertext<P> {
 impl<P: ThresholdEncryptionParameters> PrivkeyShare<P> {
     pub fn create_share(
         &self,
-        c: Ciphertext<P>,
+        c: &Ciphertext<P>,
         additional_data: &[u8],
     ) -> Result<DecryptionShare<P>, ThresholdEncryptionError> {
         let res = c.check_ciphertext_validity(additional_data);
@@ -222,19 +222,19 @@ impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
         c: Ciphertext<P>,
         additional_data: &[u8],
         vpk: ShareVerificationPubkey<P>,
-    ) -> bool
-    where
-        <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G2Prepared:
-            From<<<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Affine>,
+    ) -> bool 
     {
         let res = c.check_ciphertext_validity(additional_data);
         if res == false {
             return false;
         }
 
-        let g_inv = -G1::<P>::prime_subgroup_generator();
+        let g2_inv = -G2::<P>::prime_subgroup_generator();
         let pairing_prod_result = P::E::product_of_pairings(&[
-            (g_inv.into(), self.decryption_share.into()),
+            (
+                self.decryption_share.into(),
+                g2_inv.into(),
+            ),
             (
                 c.nonce.into(),
                 vpk.decryptor_pubkeys[self.decryptor_index].into(),
@@ -242,7 +242,6 @@ impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
         ]);
         pairing_prod_result
             == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
-        //Fqk::<P>::one()
     }
 }
 
@@ -257,14 +256,14 @@ pub fn share_combine<P: ThresholdEncryptionParameters>(
         return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
     }
 
-    let stream_cipher_key_curve_elem = ;/*Lagrange on shares here*/
-    let mut prf_key = Vec::new();
-    stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
+    // let stream_cipher_key_curve_elem = ;/*Lagrange on shares here*/
+    // let mut prf_key = Vec::new();
+    // stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
 
-    let chacha_nonce = Nonce::from_slice(b"secret nonce");
-    let mut cipher = ChaCha20::new(Key::from_slice(&prf_key), chacha_nonce);
+    // let chacha_nonce = Nonce::from_slice(b"secret nonce");
+    // let mut cipher = ChaCha20::new(Key::from_slice(&prf_key), chacha_nonce);
 
-    cipher.apply_keystream(&mut c.ciphertext);
+    // cipher.apply_keystream(&mut c.ciphertext);
 
     Ok(())
 }
@@ -289,7 +288,6 @@ mod tests {
         // <ark_bls12_381::Parameters as Bls12Parameters>::G2Parameters
         // <algebra_bls12_params as Bls12Parameters>::G2Parameters
         // <Parameters as Bls12Parameters>::G2Parameters,
-        // >; // XXX: use my hashtocurve here
         // type H = Hasher;
     }
 
@@ -307,12 +305,10 @@ mod tests {
 
         let ciphertext = epk.encrypt_msg(msg, ad, &mut rng);
 
-        let dec_shares: Vec<DecryptionShare<TestingParameters>>;
+        let mut dec_shares: Vec<DecryptionShare<TestingParameters>> = Vec::new();
         for i in 1..=num_keys {
-            dec_shares[i] = privkeys[i].create_share(ciphertext, ad).unwrap();
+            dec_shares.push(privkeys[i].create_share(&ciphertext, ad).unwrap());
         }
-        // assert!(
-        dec_shares[0].verify_share(ciphertext, ad, svp);
-        // );
+        assert!(dec_shares[0].verify_share(ciphertext, ad, svp));
     }
 }

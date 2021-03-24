@@ -6,7 +6,7 @@ edition = "2018"
 
 
 [dependencies]
-
+num = "0.3.1"
 log = "0.4.6"
 thiserror = "1.0.14"
 hex = "0.4.3"
@@ -22,8 +22,11 @@ ark-serialize = { git = "https://github.com/arkworks-rs/algebra", default-featur
 
 chacha20 = { version = "0.6.0" }
 rand_core = { version = "0.5" }
+rand = "0.7.3"
 
 algebra = { git = "https://github.com/celo-org/zexe", features = ["derive", "bls12_377", "ed_on_bw6_761", "parallel"] }
+
+miracl_core = "2.3.0"
 
 # [patch.crates-io]
 bls-crypto = { path = "/home/george/Projects/heliax/sikkatech-celo-bls-snark-rs/crates/bls-crypto/", branch = "make_hashes_have_new_fn", default-features = false }
