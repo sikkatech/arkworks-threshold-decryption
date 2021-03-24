@@ -1,5 +1,7 @@
 #![allow(type_alias_bounds)]
 // use ark_ec::{AffineCurve as ark_AffineCurve, PairingEngine as ark_PairingEngine};
+use ark_serialize::CanonicalSerialize;
+use crate::hash_to_curve::htp_bls12381_g2;
 use ark_ec::{AffineCurve, PairingEngine};
 use ark_ff::{One, ToBytes, UniformRand};
 use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
@@ -26,7 +28,7 @@ type Fr<P: ThresholdEncryptionParameters> =  <<P::E as PairingEngine>::G1Affine 
 // type Fr<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fr;
 
 use ark_serialize::CanonicalDeserialize;
-use hex;
+
 
 // trait HashToCurve : Sized {
 //     // fn new() -> Self;
@@ -53,13 +55,18 @@ use hex;
 //     }
 // }
 
-pub fn mock_hash<T: CanonicalDeserialize>(/*message: &[u8]*/) -> T {
-    let mut expected_compressed = [0u8; 96];
-    let expected_hex_string = "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903";
-    hex::decode_to_slice(expected_hex_string, &mut expected_compressed)
-        .expect("Failed to decode hex");
-    let expected = <T as CanonicalDeserialize>::deserialize(&expected_compressed[..]).unwrap();
-    expected
+pub fn mock_hash<T: ark_serialize::CanonicalDeserialize>(message: &[u8]) -> T {
+    // let mut expected_compressed = [0u8; 96];
+    // let expected_hex_string = "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903";
+    // hex::decode_to_slice(expected_hex_string, &mut expected_compressed)
+    //     .expect("Failed to decode hex");
+    // let expected = <T as CanonicalDeserialize>::deserialize(&expected_compressed[..]).unwrap();
+    // expected
+
+    let point_ser: Vec<u8> = Vec::new();
+    let point = htp_bls12381_g2(message);
+    point.serialize(point_ser.clone()).unwrap();
+    T::deserialize(&point_ser[..]).unwrap()
 }
 
 pub trait ThresholdEncryptionParameters {
@@ -128,7 +135,8 @@ fn construct_tag_hash<P: ThresholdEncryptionParameters>(
     // let hasher = P::H::new().unwrap();
     // let domain = &b"auth_tag"[..];
     // let tag_hash = hasher.hash(domain, &hash_input).unwrap();
-    let tag_hash = mock_hash::<G2<P>>(/*&hash_input*/);
+    // let tag_hash = mock_hash::<G2<P>>(/*&hash_input*/);
+    let tag_hash = mock_hash(&hash_input);
     tag_hash
 }
 
@@ -306,7 +314,7 @@ mod tests {
         let ciphertext = epk.encrypt_msg(msg, ad, &mut rng);
 
         let mut dec_shares: Vec<DecryptionShare<TestingParameters>> = Vec::new();
-        for i in 1..=num_keys {
+        for i in 0..=num_keys {
             dec_shares.push(privkeys[i].create_share(&ciphertext, ad).unwrap());
         }
         assert!(dec_shares[0].verify_share(ciphertext, ad, svp));
