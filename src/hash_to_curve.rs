@@ -11,7 +11,7 @@ use miracl_core::bls12381::ecp;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
 use miracl_core::hmac;
-use ark_ff::Zero;
+use ark_serialize::CanonicalDeserialize;
 
 fn ceil(a: usize, b: usize) -> usize {
     (a - 1) / b + 1
@@ -80,8 +80,6 @@ fn hash_to_field2_bls12381(
     u
 }
 
-use ark_serialize::CanonicalSerialize;
-
 pub fn htp_bls12381_g1(msg: &[u8]) -> ark_bls12_381::G1Affine {
     let dst = "QUUX-V01-CS02-with-BLS12381G1_XMD:SHA-256_SSWU_RO_".as_bytes();
     let u = hash_to_field_bls12381(hmac::MC_SHA2, ecp::HASH_TYPE, dst, msg, 2);
@@ -98,9 +96,7 @@ pub fn htp_bls12381_g1(msg: &[u8]) -> ark_bls12_381::G1Affine {
     let mut uncompressed_bytes = [0u8; 96];
     uncompressed_bytes.clone_from_slice(&uncompressed_bytes_with_lead[1..]);
 
-    let a = ark_bls12_381::G1Affine::zero();
-    a.serialize_uncompressed(uncompressed_bytes.to_vec()).unwrap();
-    a
+    ark_bls12_381::G1Affine::deserialize_uncompressed(&uncompressed_bytes[..]).unwrap()
 }
 
 pub fn htp_bls12381_g2(msg: &[u8]) -> ark_bls12_381::G2Affine {
@@ -127,7 +123,8 @@ pub fn htp_bls12381_g2(msg: &[u8]) -> ark_bls12_381::G2Affine {
         .clone_from_slice(&uncompressed_bytes_with_lead[145..=192]);
     uncompressed_bytes[144..=191]
         .clone_from_slice(&uncompressed_bytes_with_lead[097..=144]);
-    ark_bls12_381::G2Affine::from_uncompressed(&uncompressed_bytes).unwrap()
+
+    ark_bls12_381::G2Affine::deserialize_uncompressed(&uncompressed_bytes[..]).unwrap()
 }
 
 #[cfg(test)]
@@ -139,7 +136,7 @@ mod tests {
         hex::decode_to_slice(expected_hex_string, &mut expected_compressed)
             .expect("Failed to decode hex");
         let expected =
-            ark_bls12_381::G1Affine::from_compressed(&expected_compressed).unwrap();
+            ark_bls12_381::G1Affine::deserialize(&expected_compressed[..]).unwrap();
         let res = htp_bls12381_g1(msg);
         assert!(res == expected)
     }
@@ -149,7 +146,7 @@ mod tests {
         hex::decode_to_slice(expected_hex_string, &mut expected_compressed)
             .expect("Failed to decode hex");
         let expected =
-            ark_bls12_381::G2Affine::from_compressed(&expected_compressed).unwrap();
+            ark_bls12_381::G2Affine::deserialize(&expected_compressed[..]).unwrap();
         let res = htp_bls12381_g2(msg);
         assert!(res == expected)
     }
