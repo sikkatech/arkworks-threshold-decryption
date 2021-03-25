@@ -27,7 +27,7 @@ type Fr<P: ThresholdEncryptionParameters> =  <<P::E as PairingEngine>::G1Affine 
 // type Fqk<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fqk;
 // type Fr<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fr;
 
-use ark_serialize::CanonicalDeserialize;
+// use ark_serialize::CanonicalDeserialize;0
 
 
 // trait HashToCurve : Sized {
