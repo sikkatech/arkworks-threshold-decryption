@@ -11,12 +11,12 @@ log = "0.4.6"
 thiserror = "1.0.14"
 hex = "0.4.3"
 
-ark-ff = { git = "https://github.com/arkworks-rs/algebra", default-features = true }
-ark-ec = { git = "https://github.com/arkworks-rs/algebra", default-features = true }
-ark-poly = { git = "https://github.com/arkworks-rs/algebra", default-features = false }
-ark-serialize = { git = "https://github.com/arkworks-rs/algebra", default-features = false }
-ark-std = { git = "https://github.com/arkworks-rs/utils", default-features = true }
-ark-bls12-381 = { git = "https://github.com/arkworks-rs/curves", default-features = true }
+ark-ff = "0.2.0"
+ark-ec = "0.2.0"
+ark-poly = "0.2.0"
+ark-serialize = "0.2.0"
+ark-std = "0.2.0"
+ark-bls12-381 = "0.2.0"
 
 # ark-ff = { path = "/home/george/Projects/heliax/arkworks-algebra/ff", default-features = true }
 # ark-ec = { path = "/home/george/Projects/heliax/arkworks-algebra/ec", default-features = true }
@@ -25,8 +25,7 @@ ark-bls12-381 = { git = "https://github.com/arkworks-rs/curves", default-feature
 # ark-std = { path = "/home/george/Projects/heliax/arkworks-utils", default-features = true }
 # ark-bls12-381 = { path = "/home/george/Projects/heliax/arkworks-curves/bls12_381", default-features = true }
 
-# bls-crypto = { git = "https://github.com/sikkatech/celo-bls-snark-rs", branch="make_hashes_have_new_fn", default-features = false }
-bls-crypto = { path = "/home/george/Projects/heliax/sikkatech-celo-bls-snark-rs/crates/bls-crypto/", branch = "make_hashes_have_new_fn", default-features = false }
+bls-crypto = { git = "https://github.com/sikkatech/celo-bls-snark-rs", branch="make_hashes_have_new_fn", default-features = false }
 
 chacha20 = { version = "0.6.0" }
 rand_core = { version = "0.5" }
@@ -35,3 +34,4 @@ rand = "0.7.3"
 algebra = { git = "https://github.com/celo-org/zexe", features = ["derive", "bls12_377", "ed_on_bw6_761", "parallel"] }
 
 miracl_core = "2.3.0"
+
