@@ -17,7 +17,6 @@ use thiserror::Error;
 
 // use algebra::{PairingEngine, AffineCurve};
 
-pub mod poly;
 mod hash_to_curve;
 pub mod key_generation;
 
@@ -27,7 +26,7 @@ type Fr<P: ThresholdEncryptionParameters> =  <<P::E as PairingEngine>::G1Affine 
 // type Fqk<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fqk;
 // type Fr<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fr;
 
-// use ark_serialize::CanonicalDeserialize;0
+// use ark_serialize::CanonicalDeserialize;
 
 
 // trait HashToCurve : Sized {
