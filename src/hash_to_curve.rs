@@ -91,12 +91,15 @@ pub fn htp_bls12381_g1(msg: &[u8]) -> ark_bls12_381::G1Affine {
     /* For arcane reasons, miracl_core uses an extra leading byte,
     which is always set to either 0x02 or 0x03 for compressed representations,
     and set to 0x04 for uncompressed representations. */
-    let mut uncompressed_bytes_with_lead = [0u8; 97];
-    P.tobytes(&mut uncompressed_bytes_with_lead, false);
-    let mut uncompressed_bytes = [0u8; 96];
-    uncompressed_bytes.clone_from_slice(&uncompressed_bytes_with_lead[1..]);
 
-    ark_bls12_381::G1Affine::deserialize_uncompressed(&uncompressed_bytes[..]).unwrap()
+    let mut compressed = [0u8;49];
+    P.tobytes(&mut compressed, true);
+
+    let mut compressed_rev = [0u8; 48];
+    compressed_rev.clone_from_slice(&compressed[1..]);
+    compressed_rev[000..=047].reverse();
+
+    ark_bls12_381::G1Affine::deserialize(&compressed_rev[..]).unwrap()
 }
 
 pub fn htp_bls12381_g2(msg: &[u8]) -> ark_bls12_381::G2Affine {
@@ -112,20 +115,16 @@ pub fn htp_bls12381_g2(msg: &[u8]) -> ark_bls12_381::G2Affine {
     and set to 0x04 for uncompressed representations.
     miracl_core uses little-endian encoding for Fp2,
     whereas bls12_381 uses big-endian. */
-    let mut uncompressed_bytes_with_lead = [0u8; 193];
-    P.tobytes(&mut uncompressed_bytes_with_lead, false);
-    let mut uncompressed_bytes = [0u8; 192];
-    uncompressed_bytes[000..=047]
-        .clone_from_slice(&uncompressed_bytes_with_lead[049..=096]);
-    uncompressed_bytes[048..=095]
-        .clone_from_slice(&uncompressed_bytes_with_lead[001..=048]);
-    uncompressed_bytes[096..=143]
-        .clone_from_slice(&uncompressed_bytes_with_lead[145..=192]);
-    uncompressed_bytes[144..=191]
-        .clone_from_slice(&uncompressed_bytes_with_lead[097..=144]);
 
-    println!("BEFORE deserialize_uncompressed");
-    ark_bls12_381::G2Affine::deserialize_uncompressed(&uncompressed_bytes[..]).unwrap()
+    let mut compressed = [0u8;97];
+    P.tobytes(&mut compressed, true);
+
+    let mut compressed_rev = [0u8; 96];
+    compressed_rev.clone_from_slice(&compressed[1..]);
+    compressed_rev[000..=047].reverse();
+    compressed_rev[048..=095].reverse();
+
+    ark_bls12_381::G2Affine::deserialize(&compressed_rev[..]).unwrap()
 }
 
 #[cfg(test)]
@@ -137,17 +136,15 @@ mod tests {
         hex::decode_to_slice(expected_hex_string, &mut expected_compressed)
             .expect("Failed to decode hex");
 
-        println!("BEFORE deserialize");
-        println!("expected_compressed[..] = {:?}", expected_compressed);
+        let mut expected_compressed_rev = expected_compressed.clone();
+        expected_compressed_rev[0] &= (1<<5)-1;
+        expected_compressed_rev.reverse();
 
         let expected =
-            ark_bls12_381::G1Affine::deserialize(&expected_compressed[..]).unwrap();
-    
-        println!("AFTER deserialize");
+            ark_bls12_381::G1Affine::deserialize(&expected_compressed_rev[..]).unwrap();
 
         let res = htp_bls12381_g1(msg);
-        // println!("res = {:?}", res);
-        // println!("expected = {:?}", expected);
+
         assert!(res == expected)
     }
 
@@ -155,29 +152,26 @@ mod tests {
         let mut expected_compressed = [0u8; 96];
         hex::decode_to_slice(expected_hex_string, &mut expected_compressed)
             .expect("Failed to decode hex");
+
+        let mut expected_compressed_rev = expected_compressed.clone();
+        expected_compressed_rev[0] &= (1<<5)-1;
+        expected_compressed_rev.reverse();
+
         let expected =
-            ark_bls12_381::G2Affine::deserialize(&expected_compressed[..]).unwrap();
+            ark_bls12_381::G2Affine::deserialize(&expected_compressed_rev[..]).unwrap();
+
         let res = htp_bls12381_g2(msg);
-        // println!("res = {:?}", res);
-        // println!("expected = {:?}", expected);
+
         assert!(res == expected)
     }
 
-    // #[test]
-    // fn hash_nothing_g1() {
-    //     let msg = b"";
-    //     let expected_hex_string =
-    //         "852926add2207b76ca4fa57a8734416c8dc95e24501772c814278700eed6d1e4e8cf62d9c09db0fac349612b759e79a1";
-    //     test_hash_to_g1(msg, &expected_hex_string)
-    // }
-
-    // #[test]
-    // fn hash_nothing_g2() {
-    //     let msg = b"";
-    //     let expected_hex_string =
-    //         "a5cb8437535e20ecffaef7752baddf98034139c38452458baeefab379ba13dff5bf5dd71b72418717047f5b0f37da03d0141ebfbdca40eb85b87142e130ab689c673cf60f1a3e98d69335266f30d9b8d4ac44c1038e9dcdd5393faf5c41fb78a";
-    //     test_hash_to_g2(msg, &expected_hex_string)
-    // }
+    #[test]
+    fn hash_nothing_g1() {
+        let msg = b"";
+        let expected_hex_string =
+            "852926add2207b76ca4fa57a8734416c8dc95e24501772c814278700eed6d1e4e8cf62d9c09db0fac349612b759e79a1";
+        test_hash_to_g1(msg, &expected_hex_string)
+    }
 
     #[test]
     fn hash_abc_g1() {
@@ -187,11 +181,19 @@ mod tests {
         test_hash_to_g1(msg, &expected_hex_string)
     }
 
-    // #[test]
-    // fn hash_abc_g2() {
-    //     let msg = b"abc";
-    //     let expected_hex_string =
-    //         "939cddbccdc5e91b9623efd38c49f81a6f83f175e80b06fc374de9eb4b41dfe4ca3a230ed250fbe3a2acf73a41177fd802c2d18e033b960562aae3cab37a27ce00d80ccd5ba4b7fe0e7a210245129dbec7780ccc7954725f4168aff2787776e6";
-    //     test_hash_to_g2(msg, &expected_hex_string)
-    // }
+    #[test]
+    fn hash_nothing_g2() {
+        let msg = b"";
+        let expected_hex_string =
+            "a5cb8437535e20ecffaef7752baddf98034139c38452458baeefab379ba13dff5bf5dd71b72418717047f5b0f37da03d0141ebfbdca40eb85b87142e130ab689c673cf60f1a3e98d69335266f30d9b8d4ac44c1038e9dcdd5393faf5c41fb78a";
+        test_hash_to_g2(msg, &expected_hex_string)
+    }
+
+    #[test]
+    fn hash_abc_g2() {
+        let msg = b"abc";
+        let expected_hex_string =
+            "939cddbccdc5e91b9623efd38c49f81a6f83f175e80b06fc374de9eb4b41dfe4ca3a230ed250fbe3a2acf73a41177fd802c2d18e033b960562aae3cab37a27ce00d80ccd5ba4b7fe0e7a210245129dbec7780ccc7954725f4168aff2787776e6";
+        test_hash_to_g2(msg, &expected_hex_string)
+    }
 }
