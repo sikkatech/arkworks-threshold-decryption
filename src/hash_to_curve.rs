@@ -2,16 +2,16 @@
 #![allow(clippy::many_single_char_names)]
 #![allow(clippy::zero_prefixed_literal)]
 
+use ark_serialize::CanonicalDeserialize;
 use miracl_core::bls12381::big::BIG;
 use miracl_core::bls12381::dbig::DBIG;
-use miracl_core::bls12381::fp::FP;
-use miracl_core::bls12381::fp2::FP2;
-use miracl_core::bls12381::rom;
 use miracl_core::bls12381::ecp;
 use miracl_core::bls12381::ecp::ECP;
 use miracl_core::bls12381::ecp2::ECP2;
+use miracl_core::bls12381::fp::FP;
+use miracl_core::bls12381::fp2::FP2;
+use miracl_core::bls12381::rom;
 use miracl_core::hmac;
-use ark_serialize::CanonicalDeserialize;
 
 fn ceil(a: usize, b: usize) -> usize {
     (a - 1) / b + 1
@@ -92,7 +92,7 @@ pub fn htp_bls12381_g1(msg: &[u8]) -> ark_bls12_381::G1Affine {
     which is always set to either 0x02 or 0x03 for compressed representations,
     and set to 0x04 for uncompressed representations. */
 
-    let mut compressed = [0u8;49];
+    let mut compressed = [0u8; 49];
     P.tobytes(&mut compressed, true);
 
     let mut compressed_rev = [0u8; 48];
@@ -116,7 +116,7 @@ pub fn htp_bls12381_g2(msg: &[u8]) -> ark_bls12_381::G2Affine {
     miracl_core uses little-endian encoding for Fp2,
     whereas bls12_381 uses big-endian. */
 
-    let mut compressed = [0u8;97];
+    let mut compressed = [0u8; 97];
     P.tobytes(&mut compressed, true);
 
     let mut compressed_rev = [0u8; 96];
@@ -137,11 +137,10 @@ mod tests {
             .expect("Failed to decode hex");
 
         let mut expected_compressed_rev = expected_compressed.clone();
-        expected_compressed_rev[0] &= (1<<5)-1;
+        expected_compressed_rev[0] &= (1 << 5) - 1;
         expected_compressed_rev.reverse();
 
-        let expected =
-            ark_bls12_381::G1Affine::deserialize(&expected_compressed_rev[..]).unwrap();
+        let expected = ark_bls12_381::G1Affine::deserialize(&expected_compressed_rev[..]).unwrap();
 
         let res = htp_bls12381_g1(msg);
 
@@ -154,11 +153,10 @@ mod tests {
             .expect("Failed to decode hex");
 
         let mut expected_compressed_rev = expected_compressed.clone();
-        expected_compressed_rev[0] &= (1<<5)-1;
+        expected_compressed_rev[0] &= (1 << 5) - 1;
         expected_compressed_rev.reverse();
 
-        let expected =
-            ark_bls12_381::G2Affine::deserialize(&expected_compressed_rev[..]).unwrap();
+        let expected = ark_bls12_381::G2Affine::deserialize(&expected_compressed_rev[..]).unwrap();
 
         let res = htp_bls12381_g2(msg);
 
