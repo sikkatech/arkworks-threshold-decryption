@@ -22,7 +22,6 @@ type Fr<P: ThresholdEncryptionParameters> =
 pub fn mock_hash<T: ark_serialize::CanonicalDeserialize>(message: &[u8]) -> T {
     let mut point_ser: Vec<u8> = Vec::new();
     let point = htp_bls12381_g2(message);
-    println!("hash to curve res = {:?}", point);
     point.serialize(&mut point_ser).unwrap();
     T::deserialize(&point_ser[..]).unwrap()
 }
