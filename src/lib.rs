@@ -1,21 +1,15 @@
 #![allow(type_alias_bounds)]
-// use ark_ec::{AffineCurve as ark_AffineCurve, PairingEngine as ark_PairingEngine};
 use ark_serialize::CanonicalSerialize;
 use crate::hash_to_curve::htp_bls12381_g2;
-use ark_ec::{AffineCurve, PairingEngine};
+use ark_ec::{AffineCurve, PairingEngine, bls12::G2Projective};
 use ark_ff::{One, ToBytes, UniformRand};
 use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
 use chacha20::{ChaCha20, Key, Nonce};
 use rand_core::RngCore;
 use std::vec;
 
-
-// use bls_crypto::hash_to_curve::HashToCurve;
-
 use log::error;
 use thiserror::Error;
-
-// use algebra::{PairingEngine, AffineCurve};
 
 mod hash_to_curve;
 pub mod key_generation;
@@ -23,48 +17,13 @@ pub mod key_generation;
 type G1<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::G1Affine;
 type G2<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::G2Affine;
 type Fr<P: ThresholdEncryptionParameters> =  <<P::E as PairingEngine>::G1Affine as AffineCurve>::ScalarField;
-// type Fqk<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fqk;
-// type Fr<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::Fr;
-
-// use ark_serialize::CanonicalDeserialize;
-
-
-// trait HashToCurve : Sized {
-//     // fn new() -> Self;
-//     fn hash(
-//         &self,
-//         domain: &[u8],
-//         message: &[u8],
-//     ) -> ark_bls12_381::G2Affine;
-// }
-
-// struct Hasher;
-// impl HashToCurve for Hasher {
-//     fn hash(
-//         &self,
-//         domain: &[u8],
-//         message: &[u8],
-//     ) -> ark_bls12_381::G2Affine
-//     {
-//         let mut expected_compressed = [0u8; 96];
-//         let expected_hex_string = "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903";
-//         hex::decode_to_slice(expected_hex_string, &mut expected_compressed).expect("Failed to decode hex");
-//         let expected = <ark_bls12_381::G2Affine as CanonicalDeserialize>::deserialize(&expected_compressed[..]).unwrap();
-//         expected
-//     }
-// }
+type Fr2<P: ThresholdEncryptionParameters> =  <<P::E as PairingEngine>::G2Affine as AffineCurve>::ScalarField;
 
 pub fn mock_hash<T: ark_serialize::CanonicalDeserialize>(message: &[u8]) -> T {
-    // let mut expected_compressed = [0u8; 96];
-    // let expected_hex_string = "83567bc5ef9c690c2ab2ecdf6a96ef1c139cc0b2f284dca0a9a7943388a49a3aee664ba5379a7655d3c68900be2f6903";
-    // hex::decode_to_slice(expected_hex_string, &mut expected_compressed)
-    //     .expect("Failed to decode hex");
-    // let expected = <T as CanonicalDeserialize>::deserialize(&expected_compressed[..]).unwrap();
-    // expected
-
-    let point_ser: Vec<u8> = Vec::new();
+    let mut point_ser: Vec<u8> = Vec::new();
     let point = htp_bls12381_g2(message);
-    point.serialize(point_ser.clone()).unwrap();
+    println!("hash to curve res = {:?}", point);
+    point.serialize(&mut point_ser).unwrap();
     T::deserialize(&point_ser[..]).unwrap()
 }
 
@@ -148,21 +107,33 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
     ) -> Ciphertext<P> {
         // TODO: Come back and rename these
         let g1_generator = G1::<P>::prime_subgroup_generator();
-        let r = Fr::<P>::rand(rng);
+        // let r = Fr::<P>::rand(rng);
+        let r = Fr::<P>::one();
+        let r2: Fr2::<P> = Fr2::<P>::one();
+        
         let u = g1_generator.mul(r).into();
+
+        println!("r = {:?}", r);
+        println!("r2 = {:?}", r2);
+        println!("g1_generator = {:?}", g1_generator);
+        println!("u = {:?}", u);
+
 
         // Create the stream cipher key, which is r * Y
         // where r is the random nonce, and Y is the threshold pubkey that you are encrypting to.
         let stream_cipher_key_curve_elem = self.key.mul(r).into();
+
         // Convert this to stream cipher element into a key for the stream cipher
         // TODO: Use stream cipher Trait
         let mut prf_key = Vec::new();
         stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
 
+        let prf_key_32 = hex::decode(sha256::digest_bytes(&prf_key)).expect("PRF key decoding failed");
+
         // This nonce doesn't matter, as we never have key re-use.
         // We keep it fixed to minimize the data transmitted.
         let chacha_nonce = Nonce::from_slice(b"secret nonce");
-        let mut cipher = ChaCha20::new(Key::from_slice(&prf_key), chacha_nonce);
+        let mut cipher = ChaCha20::new(Key::from_slice(&prf_key_32), chacha_nonce);
 
         // Encrypt the message
         let mut stream_ciphertext = msg.to_vec();
@@ -171,8 +142,10 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         // Create the authentication tag
         // The authentication tag is r H(U, stream_ciphertext, additional_data)
         // So first we compute the tag hash, and then scale it by r to get the auth tag.
-        let tag_hash = construct_tag_hash::<P>(u, msg, additional_data);
-        let auth_tag = tag_hash.mul(r).into();
+        let tag_hash = construct_tag_hash::<P>(u, &stream_ciphertext[..], additional_data);
+        // let auth_tag = tag_hash.mul(r).into();
+        let auth_tag = tag_hash.mul(r2).into();
+        
 
         Ciphertext::<P> {
             nonce: u,
@@ -191,16 +164,76 @@ impl<P: ThresholdEncryptionParameters> Ciphertext<P> {
         // `e(nonce, tag hash) * e(g, auth tag)^{-1} = 1`
         // `e(nonce, tag hash) * e(-g, auth tag) = 1`
         // So first we construct the tag hash, and then we check whether this property holds or not.
-        let tag_hash = construct_tag_hash::<P>(self.nonce, &self.ciphertext, additional_data);
+
+        let tag_hash = construct_tag_hash::<P>(self.nonce, &self.ciphertext[..], additional_data);
+
         let g_inv = -G1::<P>::prime_subgroup_generator();
+
+
+        let nonce_prep: <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Prepared = self.nonce.into();
+        let tag_hash_prep: <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G2Prepared = tag_hash.into();
+        let g_inv_prep: <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Prepared = g_inv.into();
+        let g_prep: <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Prepared = G1::<P>::prime_subgroup_generator().into();
+        let auth_tag_prep: <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G2Prepared = self.auth_tag.into();
+        
+        // println!("====================================================");
+        // println!("self.nonce.into() = {:?}", nonce_prep);
+        // println!("====================================================");
+        // println!("g_inv.into() = {:?}", g_inv_prep);
+        // println!("====================================================");
+        // println!("g.into() = {:?}", g_prep);
+
+        // println!("====================================================");
+        // println!("tag_hash = {:?}", tag_hash);
+        // println!("====================================================");
+        // println!("self.auth_tag = {:?}", self.auth_tag);
+        // println!("====================================================");
+        // println!("tag_hash.into() = {:?}", tag_hash_prep);
+        // println!("====================================================");
+        // println!("self.auth_tag.into() = {:?}", auth_tag_prep);
+
+        // println!("====================================================");
+        // println!("self.nonce = {:?}", self.nonce);
+        // println!("====================================================");
+        // println!("-g_inv = {:?}", -g_inv);
+        // println!("====================================================");
+
         let pairing_prod_result = P::E::product_of_pairings(&[
             (self.nonce.into(), tag_hash.into()),
             (g_inv.into(), self.auth_tag.into()),
         ]);
+        println!("pairing_prod_result = {:?}", pairing_prod_result);
+        println!("====================================================");
 
         // Check that the result equals one
+        let one = <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one();
+        // println!("one = {:?}", one);
+
+        // silly test
+        // println!("self.nonce = {:?}", self.nonce);
+        let test_pairing_prod_result = P::E::product_of_pairings(&[
+            (
+                self.nonce.into()
+                ,
+                tag_hash.into()
+            ),
+            (
+                g_inv.into()
+                ,
+                // tag_hash.into()
+                self.auth_tag.into()
+            ),
+        ]);
+
+        // println!("test_pairing_prod_result = {:?}", test_pairing_prod_result);
+        // println!("====================================================");
+        // println!("TEST: {:?}", test_pairing_prod_result == one);
+
+
+        println!("====================================================");
+        println!("check_ciphertext_validity RETURNS: {:?}", pairing_prod_result == one);
         pairing_prod_result
-            == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
+            == one
     }
 }
 
@@ -226,29 +259,33 @@ impl<P: ThresholdEncryptionParameters> PrivkeyShare<P> {
 impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
     pub fn verify_share(
         &self,
-        c: Ciphertext<P>,
+        c: &Ciphertext<P>,
         additional_data: &[u8],
-        vpk: ShareVerificationPubkey<P>,
+        vpk: &ShareVerificationPubkey<P>,
     ) -> bool 
     {
         let res = c.check_ciphertext_validity(additional_data);
         if res == false {
+            println!("verify_share: check_ciphertext_validity FAILED");
             return false;
         }
 
-        let g2_inv = -G2::<P>::prime_subgroup_generator();
-        let pairing_prod_result = P::E::product_of_pairings(&[
-            (
-                self.decryption_share.into(),
-                g2_inv.into(),
-            ),
-            (
-                c.nonce.into(),
-                vpk.decryptor_pubkeys[self.decryptor_index].into(),
-            ),
-        ]);
-        pairing_prod_result
-            == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
+        // TODO: change pubkeys to G2, need to propagate changes in key_generation
+        // e(Ui,H)=e(Yi,W)
+        // let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], additional_data);
+        // let pairing_prod_result = P::E::product_of_pairings(&[
+        //     (
+        //         self.decryption_share.into(),
+        //         tag_hash.into(),
+        //     ),
+        //     (
+        //         vpk.decryptor_pubkeys[self.decryptor_index].into(),
+        //         c.auth_tag.into(),
+        //     ),
+        // ]);
+        // pairing_prod_result
+        //     == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
+        false
     }
 }
 
@@ -313,9 +350,13 @@ mod tests {
         let ciphertext = epk.encrypt_msg(msg, ad, &mut rng);
 
         let mut dec_shares: Vec<DecryptionShare<TestingParameters>> = Vec::new();
-        for i in 0..=num_keys {
+        for i in 0..num_keys {
             dec_shares.push(privkeys[i].create_share(&ciphertext, ad).unwrap());
         }
-        assert!(dec_shares[0].verify_share(ciphertext, ad, svp));
+
+        assert!(dec_shares[0].verify_share(&ciphertext, ad, &svp));
+        assert!(dec_shares[1].verify_share(&ciphertext, ad, &svp));
+        assert!(dec_shares[2].verify_share(&ciphertext, ad, &svp));
+        assert!(dec_shares[3].verify_share(&ciphertext, ad, &svp));
     }
 }

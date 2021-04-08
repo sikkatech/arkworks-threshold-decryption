@@ -1,7 +1,7 @@
 [package]
 name = "arkworks-threshold-decryption"
 version = "0.0.1"
-authors = ["ValarDragon <dev@sikka.tech>"]
+authors = ["ValarDragon <dev@sikka.tech>", "Georgios Gkitsas <ggkitsas@yahoo.com>"]
 edition = "2018"
 
 
@@ -18,13 +18,6 @@ ark-serialize = "0.2.0"
 ark-std = "0.2.0"
 ark-bls12-381 = "0.2.0"
 
-# ark-ff = { path = "/home/george/Projects/heliax/arkworks-algebra/ff", default-features = true }
-# ark-ec = { path = "/home/george/Projects/heliax/arkworks-algebra/ec", default-features = true }
-# ark-poly = { path = "/home/george/Projects/heliax/arkworks-algebra/poly", default-features = false }
-# ark-serialize = { path = "/home/george/Projects/heliax/arkworks-algebra/serialize", default-features = false }
-# ark-std = { path = "/home/george/Projects/heliax/arkworks-utils", default-features = true }
-# ark-bls12-381 = { path = "/home/george/Projects/heliax/arkworks-curves/bls12_381", default-features = true }
-
 bls-crypto = { git = "https://github.com/sikkatech/celo-bls-snark-rs", branch="make_hashes_have_new_fn", default-features = false }
 
 chacha20 = { version = "0.6.0" }
@@ -35,3 +28,4 @@ algebra = { git = "https://github.com/celo-org/zexe", features = ["derive", "bls
 
 miracl_core = "2.3.0"
 
+sha256 = "1.0.0"
