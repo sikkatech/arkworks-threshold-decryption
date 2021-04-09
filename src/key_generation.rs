@@ -1,6 +1,5 @@
-use ark_ec::AffineCurve; //, PairingEngine, ProjectiveCurve};
-                         // use ark_ff::{Field, PrimeField, UniformRand, Zero};
 use crate::*;
+use ark_ec::AffineCurve;
 use ark_poly::{univariate::DensePolynomial, Polynomial, UVPolynomial};
 
 use rand_core::RngCore;
