@@ -157,7 +157,6 @@ impl<P: ThresholdEncryptionParameters> Ciphertext<P> {
             (g_inv.into(), self.auth_tag.into()),
         ]);
 
-        // Check that the result equals one
         pairing_prod_result
             == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
     }
@@ -194,16 +193,15 @@ impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
             return false;
         }
 
-        // e(Ui,H) ?= e(Yi,W)
+        // e(Ui,H) ?= e(Yi,W) => e(-Ui,H)*e(Yi,W) ?= 1
         let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], additional_data);
         let pairing_prod_result = P::E::product_of_pairings(&[
             ((-self.decryption_share).into(), tag_hash.into()),
             (
-                vpk.decryptor_pubkeys[self.decryptor_index-1].into(),
+                vpk.decryptor_pubkeys[self.decryptor_index - 1].into(),
                 c.auth_tag.into(),
             ),
         ]);
-
         pairing_prod_result
             == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
     }
@@ -239,19 +237,10 @@ mod tests {
     use crate::*;
     use ark_std::test_rng;
 
-    // use algebra::curves::bls12::Bls12Parameters;// as algebra_bls12_params;
-    // use ark_ec::bls12::Bls12Parameters;
-
     pub struct TestingParameters {}
 
     impl ThresholdEncryptionParameters for TestingParameters {
         type E = ark_bls12_381::Bls12_381;
-        // type E = Bls12_377;
-        // type H = bls_crypto::hash_to_curve::try_and_increment::TryAndIncrement::<bls_crypto::hashers::DirectHasher,
-        // <ark_bls12_381::Parameters as Bls12Parameters>::G2Parameters
-        // <algebra_bls12_params as Bls12Parameters>::G2Parameters
-        // <Parameters as Bls12Parameters>::G2Parameters,
-        // type H = Hasher;
     }
 
     #[test]
