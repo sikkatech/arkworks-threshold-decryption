@@ -28,21 +28,20 @@ pub fn mock_hash<T: ark_serialize::CanonicalDeserialize>(message: &[u8]) -> T {
 
 pub trait ThresholdEncryptionParameters {
     type E: PairingEngine;
-    // type H: HashToCurve<Output= G2<Self>>;
 }
 
 pub struct EncryptionPubkey<P: ThresholdEncryptionParameters> {
-    pub key: G1<P>,
+    pub key: G1<P>, // Y=Y_0=x_0*P_1
 }
 
 pub struct ShareVerificationPubkey<P: ThresholdEncryptionParameters> {
-    pub decryptor_pubkeys: Vec<G1<P>>,
+    pub decryptor_pubkeys: Vec<G1<P>>, // (Y_1 .. Y_n)
 }
 
 pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
-    pub index: usize,
-    pub privkey: Fr<P>,
-    pub pubkey: G1<P>,
+    pub index: usize,   // i
+    pub privkey: Fr<P>, // x_i
+    pub pubkey: G1<P>,  // Y_i
 }
 
 pub struct Ciphertext<P: ThresholdEncryptionParameters> {
@@ -89,12 +88,7 @@ fn construct_tag_hash<P: ThresholdEncryptionParameters>(
     hash_input.extend_from_slice(stream_ciphertext);
     hash_input.extend_from_slice(additional_data);
 
-    // let hasher = P::H::new().unwrap();
-    // let domain = &b"auth_tag"[..];
-    // let tag_hash = hasher.hash(domain, &hash_input).unwrap();
-    // let tag_hash = mock_hash::<G2<P>>(/*&hash_input*/);
-    let tag_hash = mock_hash(&hash_input);
-    tag_hash
+    mock_hash(&hash_input)
 }
 
 impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
@@ -107,6 +101,7 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         // TODO: Come back and rename these
         let g1_generator = G1::<P>::prime_subgroup_generator();
         let r = Fr::<P>::rand(rng);
+        // let r = Fr::<P>::one();
         let u = g1_generator.mul(r).into();
 
         // Create the stream cipher key, which is r * Y
@@ -117,7 +112,7 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         // TODO: Use stream cipher Trait
         let mut prf_key = Vec::new();
         stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
-
+        // Pass it through SHA-256 to derive 256bits
         let prf_key_32 =
             hex::decode(sha256::digest_bytes(&prf_key)).expect("PRF key decoding failed");
 
@@ -196,23 +191,21 @@ impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
     ) -> bool {
         let res = c.check_ciphertext_validity(additional_data);
         if res == false {
-            println!("verify_share: check_ciphertext_validity FAILED");
             return false;
         }
 
-        // TODO: change pubkeys to G2, need to propagate changes in key_generation
-        // e(Ui,H)=e(Yi,W)
+        // e(Ui,H) ?= e(Yi,W)
         let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], additional_data);
         let pairing_prod_result = P::E::product_of_pairings(&[
-            (self.decryption_share.into(), tag_hash.into()),
+            ((-self.decryption_share).into(), tag_hash.into()),
             (
-                vpk.decryptor_pubkeys[self.decryptor_index].into(),
+                vpk.decryptor_pubkeys[self.decryptor_index-1].into(),
                 c.auth_tag.into(),
             ),
         ]);
+
         pairing_prod_result
             == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
-        // false
     }
 }
 
