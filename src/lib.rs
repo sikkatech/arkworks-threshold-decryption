@@ -1,7 +1,7 @@
 #![allow(type_alias_bounds)]
 use crate::hash_to_curve::htp_bls12381_g2;
 use ark_ec::{AffineCurve, PairingEngine};
-use ark_ff::{One, ToBytes, UniformRand};
+use ark_ff::{One, Zero, ToBytes, UniformRand};
 use ark_serialize::CanonicalSerialize;
 use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
 use chacha20::{ChaCha20, Key, Nonce};
@@ -218,14 +218,33 @@ pub fn share_combine<P: ThresholdEncryptionParameters>(
         return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
     }
 
-    // let stream_cipher_key_curve_elem = ;/*Lagrange on shares here*/
-    // let mut prf_key = Vec::new();
-    // stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
+    let mut stream_cipher_key_curve_elem : <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Affine = <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Affine::zero();
+    let mut lagrange_coeff: Fr<P> = Fr::<P>::zero();
+    for j in 0..shares.len() {
+        for i in 0..shares.len() {
+            if i != j {
+                let ii = Fr::<P>::from(i as u32);
+                let ji = Fr::<P>::from(j as u32);
+                lagrange_coeff = lagrange_coeff * (-(ii)/(ii-ji));
+            }
+        }
 
-    // let chacha_nonce = Nonce::from_slice(b"secret nonce");
-    // let mut cipher = ChaCha20::new(Key::from_slice(&prf_key), chacha_nonce);
+        stream_cipher_key_curve_elem = stream_cipher_key_curve_elem + shares[j].decryption_share.mul(lagrange_coeff).into();
+    }
 
-    // cipher.apply_keystream(&mut c.ciphertext);
+    let mut prf_key = Vec::new();
+    stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
+    // Pass it through SHA-256 to derive 256bits
+    let prf_key_32 =
+        hex::decode(sha256::digest_bytes(&prf_key)).expect("PRF key decoding failed");
+
+    // This nonce doesn't matter, as we never have key re-use.
+    // We keep it fixed to minimize the data transmitted.
+    let chacha_nonce = Nonce::from_slice(b"secret nonce");
+    let mut cipher = ChaCha20::new(Key::from_slice(&prf_key_32), chacha_nonce);
+
+    plaintext.clone_from_slice(&c.ciphertext[..]);
+    cipher.apply_keystream(plaintext);
 
     Ok(())
 }
@@ -260,11 +279,16 @@ mod tests {
         let mut dec_shares: Vec<DecryptionShare<TestingParameters>> = Vec::new();
         for i in 0..num_keys {
             dec_shares.push(privkeys[i].create_share(&ciphertext, ad).unwrap());
+            assert!(dec_shares[i].verify_share(&ciphertext, ad, &svp));
         }
 
-        assert!(dec_shares[0].verify_share(&ciphertext, ad, &svp));
-        assert!(dec_shares[1].verify_share(&ciphertext, ad, &svp));
-        assert!(dec_shares[2].verify_share(&ciphertext, ad, &svp));
-        assert!(dec_shares[3].verify_share(&ciphertext, ad, &svp));
+        let plaintext: &mut [u8];
+        plaintext.clone_from_slice(&ciphertext.ciphertext[..]);
+        let comb = share_combine(
+            plaintext,
+            ciphertext,
+            ad,
+            dec_shares,
+        ).unwrap();
     }
 }
