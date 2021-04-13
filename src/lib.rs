@@ -101,7 +101,6 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         // TODO: Come back and rename these
         let g1_generator = G1::<P>::prime_subgroup_generator();
         let r = Fr::<P>::rand(rng);
-        // let r = Fr::<P>::one();
         let u = g1_generator.mul(r).into();
 
         // Create the stream cipher key, which is r * Y
@@ -112,6 +111,7 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         // TODO: Use stream cipher Trait
         let mut prf_key = Vec::new();
         stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
+
         // Pass it through SHA-256 to derive 256bits
         let prf_key_32 =
             hex::decode(sha256::digest_bytes(&prf_key)).expect("PRF key decoding failed");
@@ -218,22 +218,24 @@ pub fn share_combine<P: ThresholdEncryptionParameters>(
         return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
     }
 
-    let mut stream_cipher_key_curve_elem : <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Affine = <<P as ThresholdEncryptionParameters>::E as PairingEngine>::G1Affine::zero();
-    let mut lagrange_coeff: Fr<P> = Fr::<P>::zero();
-    for j in 0..shares.len() {
-        for i in 0..shares.len() {
+
+    let mut stream_cipher_key_curve_elem : G1<P> = G1::<P>::zero();
+    for j in 1..=shares.len() {
+        let mut lagrange_coeff: Fr<P> = Fr::<P>::one();
+        let ji = <Fr<P> as From<u64>>::from(j as u64);
+        for i in 1..=shares.len() {
             if i != j {
-                let ii = Fr::<P>::from(i as u32);
-                let ji = Fr::<P>::from(j as u32);
-                lagrange_coeff = lagrange_coeff * (-(ii)/(ii-ji));
+                let ii = <Fr<P> as From<u64>>::from(i as u64);
+                lagrange_coeff = lagrange_coeff * ((Fr::<P>::zero()-(ii))/(ji-ii));
             }
         }
 
-        stream_cipher_key_curve_elem = stream_cipher_key_curve_elem + shares[j].decryption_share.mul(lagrange_coeff).into();
+        stream_cipher_key_curve_elem = stream_cipher_key_curve_elem + shares[j-1].decryption_share.mul(lagrange_coeff).into();
     }
 
     let mut prf_key = Vec::new();
     stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
+
     // Pass it through SHA-256 to derive 256bits
     let prf_key_32 =
         hex::decode(sha256::digest_bytes(&prf_key)).expect("PRF key decoding failed");
@@ -282,13 +284,13 @@ mod tests {
             assert!(dec_shares[i].verify_share(&ciphertext, ad, &svp));
         }
 
-        let plaintext: &mut [u8];
-        plaintext.clone_from_slice(&ciphertext.ciphertext[..]);
-        let comb = share_combine(
-            plaintext,
+        let mut plaintext: Vec<u8> = ciphertext.ciphertext.clone();
+        share_combine(
+            &mut plaintext,
             ciphertext,
             ad,
             dec_shares,
         ).unwrap();
+        assert!(plaintext == msg)
     }
 }
