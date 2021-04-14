@@ -1,7 +1,7 @@
 #![allow(type_alias_bounds)]
 use crate::hash_to_curve::htp_bls12381_g2;
 use ark_ec::{AffineCurve, PairingEngine};
-use ark_ff::{One, Zero, ToBytes, UniformRand};
+use ark_ff::{One, ToBytes, UniformRand, Zero};
 use ark_serialize::CanonicalSerialize;
 use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
 use chacha20::{ChaCha20, Key, Nonce};
@@ -11,8 +11,8 @@ use std::vec;
 use log::error;
 use thiserror::Error;
 
-use blake2::VarBlake2b;
 use blake2::digest::{Update, VariableOutput};
+use blake2::VarBlake2b;
 
 mod hash_to_curve;
 pub mod key_generation;
@@ -221,19 +221,19 @@ pub fn share_combine<P: ThresholdEncryptionParameters>(
         return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
     }
 
-
-    let mut stream_cipher_key_curve_elem : G1<P> = G1::<P>::zero();
+    let mut stream_cipher_key_curve_elem: G1<P> = G1::<P>::zero();
     for j in 1..=shares.len() {
         let mut lagrange_coeff: Fr<P> = Fr::<P>::one();
         let ji = <Fr<P> as From<u64>>::from(j as u64);
         for i in 1..=shares.len() {
             if i != j {
                 let ii = <Fr<P> as From<u64>>::from(i as u64);
-                lagrange_coeff = lagrange_coeff * ((Fr::<P>::zero()-(ii))/(ji-ii));
+                lagrange_coeff = lagrange_coeff * ((Fr::<P>::zero() - (ii)) / (ji - ii));
             }
         }
 
-        stream_cipher_key_curve_elem = stream_cipher_key_curve_elem + shares[j-1].decryption_share.mul(lagrange_coeff).into();
+        stream_cipher_key_curve_elem = stream_cipher_key_curve_elem
+            + shares[j - 1].decryption_share.mul(lagrange_coeff).into();
     }
 
     // Calculate the chacha20 key
@@ -289,12 +289,7 @@ mod tests {
         }
 
         let mut plaintext: Vec<u8> = ciphertext.ciphertext.clone();
-        share_combine(
-            &mut plaintext,
-            ciphertext,
-            ad,
-            dec_shares,
-        ).unwrap();
+        share_combine(&mut plaintext, ciphertext, ad, dec_shares).unwrap();
         assert!(plaintext == msg)
     }
 }
