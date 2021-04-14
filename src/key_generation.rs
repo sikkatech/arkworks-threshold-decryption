@@ -13,7 +13,6 @@ pub fn generate_keys<P: ThresholdEncryptionParameters, R: RngCore>(
     ShareVerificationPubkey<P>,
     Vec<PrivkeyShare<P>>,
 ) {
-    println!("num_keys = {:?}", num_keys);
     assert!(num_keys >= threshold);
     let generator = G1::<P>::prime_subgroup_generator();
 
@@ -24,7 +23,6 @@ pub fn generate_keys<P: ThresholdEncryptionParameters, R: RngCore>(
     // Create "encryption pubkey"
     let zero_pt = <Fr<P> as From<u64>>::from(0u64);
     let master_privkey: Fr<P> = threshold_poly.evaluate(&zero_pt);
-    println!("master_privkey = {:?}", master_privkey);
     let encryption_pubkey = EncryptionPubkey::<P> {
         key: generator.mul(master_privkey).into(),
     };

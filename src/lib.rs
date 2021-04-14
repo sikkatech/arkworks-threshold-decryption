@@ -11,6 +11,9 @@ use std::vec;
 use log::error;
 use thiserror::Error;
 
+use blake2::VarBlake2b;
+use blake2::digest::{Update, VariableOutput};
+
 mod hash_to_curve;
 pub mod key_generation;
 
@@ -111,10 +114,10 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         // TODO: Use stream cipher Trait
         let mut prf_key = Vec::new();
         stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
-
-        // Pass it through SHA-256 to derive 256bits
-        let prf_key_32 =
-            hex::decode(sha256::digest_bytes(&prf_key)).expect("PRF key decoding failed");
+        let mut hasher = VarBlake2b::new(32).unwrap();
+        hasher.update(prf_key);
+        let mut prf_key_32 = [0u8; 32];
+        hasher.finalize_variable(|p| prf_key_32.clone_from_slice(p));
 
         // This nonce doesn't matter, as we never have key re-use.
         // We keep it fixed to minimize the data transmitted.
@@ -233,12 +236,13 @@ pub fn share_combine<P: ThresholdEncryptionParameters>(
         stream_cipher_key_curve_elem = stream_cipher_key_curve_elem + shares[j-1].decryption_share.mul(lagrange_coeff).into();
     }
 
+    // Calculate the chacha20 key
     let mut prf_key = Vec::new();
     stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
-
-    // Pass it through SHA-256 to derive 256bits
-    let prf_key_32 =
-        hex::decode(sha256::digest_bytes(&prf_key)).expect("PRF key decoding failed");
+    let mut hasher = VarBlake2b::new(32).unwrap();
+    hasher.update(prf_key);
+    let mut prf_key_32 = [0u8; 32];
+    hasher.finalize_variable(|p| prf_key_32.clone_from_slice(p));
 
     // This nonce doesn't matter, as we never have key re-use.
     // We keep it fixed to minimize the data transmitted.
