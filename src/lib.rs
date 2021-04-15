@@ -222,18 +222,18 @@ pub fn share_combine<P: ThresholdEncryptionParameters>(
     }
 
     let mut stream_cipher_key_curve_elem: G1<P> = G1::<P>::zero();
-    for j in 1..=shares.len() {
+    for j in shares.iter() {
         let mut lagrange_coeff: Fr<P> = Fr::<P>::one();
-        let ji = <Fr<P> as From<u64>>::from(j as u64);
-        for i in 1..=shares.len() {
-            if i != j {
-                let ii = <Fr<P> as From<u64>>::from(i as u64);
+        let ji = <Fr<P> as From<u64>>::from(j.decryptor_index as u64);
+        for i in shares.iter() {
+            let ii = <Fr<P> as From<u64>>::from(i.decryptor_index as u64);
+            if ii != ji {
                 lagrange_coeff = lagrange_coeff * ((Fr::<P>::zero() - (ii)) / (ji - ii));
             }
         }
 
         stream_cipher_key_curve_elem = stream_cipher_key_curve_elem
-            + shares[j - 1].decryption_share.mul(lagrange_coeff).into();
+            + j.decryption_share.mul(lagrange_coeff).into();
     }
 
     // Calculate the chacha20 key
