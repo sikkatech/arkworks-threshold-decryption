@@ -8,16 +8,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'arkworks-threshold-decryption'",
+            "name": "Debug unit tests in library 'tpke'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=arkworks-threshold-decryption"
+                    "--package=tpke"
                 ],
                 "filter": {
-                    "name": "arkworks-threshold-decryption",
+                    "name": "tpke",
                     "kind": "lib"
                 }
             },
