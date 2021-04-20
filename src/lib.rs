@@ -185,6 +185,22 @@ impl<P: ThresholdEncryptionParameters> PrivkeyShare<P> {
 }
 
 impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
+
+    pub fn check_decryption_share_validity(&self, c: &Ciphertext<P>, vpk: &ShareVerificationPubkey<P>, additional_data: &[u8]) -> bool {
+        // e(Ui,H) ?= e(Yi,W) => e(-Ui,H)*e(Yi,W) ?= 1
+        let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], additional_data);
+        let pairing_prod_result = P::E::product_of_pairings(&[
+            ((-self.decryption_share).into(), tag_hash.into()),
+            (
+                vpk.decryptor_pubkeys[self.decryptor_index - 1].into(),
+                c.auth_tag.into(),
+            ),
+        ]);
+
+        pairing_prod_result
+        == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
+    }
+
     pub fn verify_share(
         &self,
         c: &Ciphertext<P>,
@@ -196,17 +212,7 @@ impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
             return false;
         }
 
-        // e(Ui,H) ?= e(Yi,W) => e(-Ui,H)*e(Yi,W) ?= 1
-        let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], additional_data);
-        let pairing_prod_result = P::E::product_of_pairings(&[
-            ((-self.decryption_share).into(), tag_hash.into()),
-            (
-                vpk.decryptor_pubkeys[self.decryptor_index - 1].into(),
-                c.auth_tag.into(),
-            ),
-        ]);
-        pairing_prod_result
-            == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
+        self.check_decryption_share_validity(c, vpk, additional_data)
     }
 }
 
@@ -253,6 +259,12 @@ pub fn share_combine<P: ThresholdEncryptionParameters>(
     cipher.apply_keystream(plaintext);
 
     Ok(())
+}
+
+
+pub fn batch_check_ciphertext_validity(additional_data: &[u8]) -> bool {
+    // TODO
+    false
 }
 
 #[cfg(test)]
