@@ -3,7 +3,10 @@ name = "tpke"
 version = "0.0.1"
 authors = ["ValarDragon <dev@sikka.tech>", "Georgios Gkitsas <ggkitsas@yahoo.com>"]
 edition = "2018"
-
+license = "MIT OR Apache-2.0"
+description = "Pairing-based threshold decryption"
+repository = "https://github.com/heliaxdev/arkworks-threshold-decryption/"
+readme = "README.md"
 
 [dependencies]
 num = "0.4.0"
