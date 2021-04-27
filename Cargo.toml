@@ -1,7 +1,7 @@
 [package]
 name = "tpke"
 version = "0.0.1"
-authors = ["ValarDragon <dev@sikka.tech>", "Georgios Gkitsas <ggkitsas@yahoo.com>"]
+authors = ["Heliax AG <hello@heliax.dev>", "ValarDragon <dev@sikka.tech>", "Georgios Gkitsas <georgios@heliax.dev>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 description = "Pairing-based threshold decryption"
