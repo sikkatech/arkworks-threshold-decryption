@@ -8,6 +8,8 @@ use chacha20::{ChaCha20, Key, Nonce};
 use rand_core::RngCore;
 use std::vec;
 use serde::{Deserialize, Serialize};
+use zeroize::Zeroize;
+use std::pin::Pin;
 
 use log::error;
 use thiserror::Error;
@@ -48,7 +50,7 @@ pub mod ark_serde {
     }
 }
 
-pub fn mock_hash<T: ark_serialize::CanonicalDeserialize>(message: &[u8]) -> T {
+pub fn hash_to_g2<T: ark_serialize::CanonicalDeserialize>(message: &[u8]) -> T {
     let mut point_ser: Vec<u8> = Vec::new();
     let point = htp_bls12381_g2(message);
     point.serialize(&mut point_ser).unwrap();
@@ -71,10 +73,11 @@ pub struct ShareVerificationPubkey<P: ThresholdEncryptionParameters> {
     pub decryptor_pubkeys: Vec<G1<P>>, // (Y_1 .. Y_n)
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Zeroize)]
 pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
     pub index: usize,   // i
     #[serde(with = "ark_serde")]
+    #[zeroize(drop)]
     pub privkey: Fr<P>, // x_i
     #[serde(with = "ark_serde")]
     pub pubkey: G1<P>,  // Y_i
@@ -130,7 +133,7 @@ fn construct_tag_hash<P: ThresholdEncryptionParameters>(
     hash_input.extend_from_slice(stream_ciphertext);
     hash_input.extend_from_slice(additional_data);
 
-    mock_hash(&hash_input)
+    hash_to_g2(&hash_input)
 }
 
 impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {

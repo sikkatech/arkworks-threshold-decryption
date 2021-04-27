@@ -3,6 +3,7 @@ use ark_ec::AffineCurve;
 use ark_poly::{univariate::DensePolynomial, Polynomial, UVPolynomial};
 
 use rand_core::RngCore;
+use zeroize::Zeroize;
 
 pub fn generate_keys<P: ThresholdEncryptionParameters, R: RngCore>(
     threshold: usize,
@@ -32,7 +33,7 @@ pub fn generate_keys<P: ThresholdEncryptionParameters, R: RngCore>(
     let mut privkeys = vec![];
     for i in 1..=num_keys {
         let pt = <Fr<P> as From<u64>>::from(i as u64);
-        let privkey_coeff = threshold_poly.evaluate(&pt);
+        let mut privkey_coeff = threshold_poly.evaluate(&pt);
         pubkey_shares.push(generator.mul(privkey_coeff).into());
 
         let privkey = PrivkeyShare::<P> {
@@ -41,6 +42,10 @@ pub fn generate_keys<P: ThresholdEncryptionParameters, R: RngCore>(
             pubkey: pubkey_shares[i - 1],
         };
         privkeys.push(privkey);
+
+        if i==num_keys {
+            privkey_coeff.zeroize();
+        }
     }
     let verification_pubkey = ShareVerificationPubkey::<P> {
         decryptor_pubkeys: pubkey_shares,

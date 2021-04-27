@@ -13,6 +13,13 @@ num = "0.4.0"
 log = "0.4.6"
 thiserror = "1.0.14"
 hex = "0.4.3"
+zeroize = "1.3.0"
+rand_core = { version = "0.5" }
+rand = "0.7.3"
+chacha20 = { version = "0.6.0" }
+blake2 = "0.9.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_bytes = { version = "0.11" }
 
 ark-ff = "0.2.0"
 ark-ec = "0.2.0"
@@ -22,20 +29,9 @@ ark-std = "0.2.0"
 ark-bls12-381 = "0.2.0"
 
 bls-crypto = { git = "https://github.com/sikkatech/celo-bls-snark-rs", branch="make_hashes_have_new_fn", default-features = false }
-
-chacha20 = { version = "0.6.0" }
-rand_core = { version = "0.5" }
-rand = "0.7.3"
-blake2 = "0.9.1"
-
 algebra = { git = "https://github.com/celo-org/zexe", features = ["derive", "bls12_377", "ed_on_bw6_761", "parallel"] }
-
 miracl_core = "2.3.0"
-
-serde = { version = "1.0", features = ["derive"] }
-serde_bytes = { version = "0.11" }
 
 [dev-dependencies]
 criterion = "0.3.4"
 bincode = "1.3"
-
