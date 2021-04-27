@@ -6,10 +6,10 @@ use ark_serialize::CanonicalSerialize;
 use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
 use chacha20::{ChaCha20, Key, Nonce};
 use rand_core::RngCore;
-use std::vec;
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
 use std::pin::Pin;
+use std::vec;
+use zeroize::Zeroize;
 
 use log::error;
 use thiserror::Error;
@@ -75,27 +75,26 @@ pub struct ShareVerificationPubkey<P: ThresholdEncryptionParameters> {
 
 #[derive(Serialize, Deserialize, Clone, Zeroize)]
 pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
-    pub index: usize,   // i
+    pub index: usize, // i
     #[serde(with = "ark_serde")]
     #[zeroize(drop)]
     pub privkey: Fr<P>, // x_i
     #[serde(with = "ark_serde")]
-    pub pubkey: G1<P>,  // Y_i
+    pub pubkey: G1<P>, // Y_i
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Ciphertext<P: ThresholdEncryptionParameters> {
     #[serde(with = "ark_serde")]
-    pub nonce: G1<P>,        // U
+    pub nonce: G1<P>, // U
     pub ciphertext: Vec<u8>, // V
     #[serde(with = "ark_serde")]
-    pub auth_tag: G2<P>,     // W
+    pub auth_tag: G2<P>, // W
 }
-
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct DecryptionShare<P: ThresholdEncryptionParameters> {
-    pub decryptor_index: usize,  // i
+    pub decryptor_index: usize, // i
     #[serde(with = "ark_serde")]
     pub decryption_share: G1<P>, // U_i = x_i*U
 }
@@ -227,8 +226,12 @@ impl<P: ThresholdEncryptionParameters> PrivkeyShare<P> {
 }
 
 impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
-
-    pub fn check_decryption_share_validity(&self, c: &Ciphertext<P>, vpk: &ShareVerificationPubkey<P>, additional_data: &[u8]) -> bool {
+    pub fn check_decryption_share_validity(
+        &self,
+        c: &Ciphertext<P>,
+        vpk: &ShareVerificationPubkey<P>,
+        additional_data: &[u8],
+    ) -> bool {
         // e(Ui,H) ?= e(Yi,W) => e(-Ui,H)*e(Yi,W) ?= 1
         let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], additional_data);
         let pairing_prod_result = P::E::product_of_pairings(&[
@@ -240,7 +243,7 @@ impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
         ]);
 
         pairing_prod_result
-        == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
+            == <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
     }
 
     pub fn verify_share(
@@ -280,8 +283,8 @@ pub fn share_combine<P: ThresholdEncryptionParameters>(
             }
         }
 
-        stream_cipher_key_curve_elem = stream_cipher_key_curve_elem
-            + j.decryption_share.mul(lagrange_coeff).into();
+        stream_cipher_key_curve_elem =
+            stream_cipher_key_curve_elem + j.decryption_share.mul(lagrange_coeff).into();
     }
 
     // Calculate the chacha20 key
@@ -302,7 +305,6 @@ pub fn share_combine<P: ThresholdEncryptionParameters>(
 
     Ok(())
 }
-
 
 pub fn batch_check_ciphertext_validity(additional_data: &[u8]) -> bool {
     // TODO
@@ -361,13 +363,14 @@ mod tests {
         assert!(epk_new.key == epk.key);
 
         let svp_ser = bincode::serialize(&svp).unwrap();
-        let svp_new: ShareVerificationPubkey<TestingParameters> = bincode::deserialize(&svp_ser).unwrap();
+        let svp_new: ShareVerificationPubkey<TestingParameters> =
+            bincode::deserialize(&svp_ser).unwrap();
         assert!(svp_new.decryptor_pubkeys == svp.decryptor_pubkeys);
 
         let privkeys_ser = bincode::serialize(&privkeys).unwrap();
-        let privkeys_new: Vec<PrivkeyShare<TestingParameters>> = bincode::deserialize(&privkeys_ser).unwrap();
-        for p in privkeys.iter().zip(privkeys_new.iter())
-        {
+        let privkeys_new: Vec<PrivkeyShare<TestingParameters>> =
+            bincode::deserialize(&privkeys_ser).unwrap();
+        for p in privkeys.iter().zip(privkeys_new.iter()) {
             let (p1, p2) = p;
             assert!(p1.index == p2.index);
             assert!(p1.privkey == p2.privkey);
@@ -378,7 +381,8 @@ mod tests {
         let ad: &[u8] = "".as_bytes();
         let ciphertext = epk.encrypt_msg(msg, ad, &mut rng);
         let ciphertext_ser = bincode::serialize(&ciphertext).unwrap();
-        let ciphertext_new: Ciphertext<TestingParameters> = bincode::deserialize(&ciphertext_ser).unwrap();
+        let ciphertext_new: Ciphertext<TestingParameters> =
+            bincode::deserialize(&ciphertext_ser).unwrap();
         assert!(ciphertext_new.nonce == ciphertext.nonce);
         assert!(ciphertext_new.ciphertext == ciphertext.ciphertext);
         assert!(ciphertext_new.auth_tag == ciphertext.auth_tag);
@@ -388,12 +392,12 @@ mod tests {
             dec_shares.push(privkeys[i].create_share(&ciphertext, ad).unwrap());
         }
         let dec_shares_ser = bincode::serialize(&dec_shares).unwrap();
-        let dec_shares_new: Vec<DecryptionShare<TestingParameters>> = bincode::deserialize(&dec_shares_ser).unwrap();
-        for sh in dec_shares.iter().zip(dec_shares_new.iter())
-        {
+        let dec_shares_new: Vec<DecryptionShare<TestingParameters>> =
+            bincode::deserialize(&dec_shares_ser).unwrap();
+        for sh in dec_shares.iter().zip(dec_shares_new.iter()) {
             let (sh1, sh2) = sh;
-            assert!(sh1.decryptor_index ==sh2.decryptor_index);
-            assert!(sh1.decryption_share ==sh2.decryption_share);
+            assert!(sh1.decryptor_index == sh2.decryptor_index);
+            assert!(sh1.decryption_share == sh2.decryption_share);
         }
     }
 }

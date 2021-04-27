@@ -43,7 +43,7 @@ pub fn generate_keys<P: ThresholdEncryptionParameters, R: RngCore>(
         };
         privkeys.push(privkey);
 
-        if i==num_keys {
+        if i == num_keys {
             privkey_coeff.zeroize();
         }
     }
