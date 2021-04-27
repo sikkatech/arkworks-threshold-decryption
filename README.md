@@ -3,7 +3,7 @@ Pairing-based threshold decryption library
 
 DO NOT USE IN PRODUCTION, VERY MUCH IN PROGRESS
 
-This repository implements the threshold decryption scheme of [BZ03](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.119.1717&rep=rep1&type=pdf). We implement two further optimizations to this scheme:
+This repository implements a threshold decryption scheme based on [BZ03](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.119.1717&rep=rep1&type=pdf). We implement two further optimizations to this scheme:
 * One allows for 'additional data' to be augmented to the ciphertext, essentially achieving a threshold-decryptable AEAD scheme.
 * The second allows for batching the decryption shares together, and to have the end-verifier only need to verify the combined decryption share.
 
