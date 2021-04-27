@@ -7,6 +7,7 @@ use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
 use chacha20::{ChaCha20, Key, Nonce};
 use rand_core::RngCore;
 use std::vec;
+use serde::{Deserialize, Serialize};
 
 use log::error;
 use thiserror::Error;
@@ -22,6 +23,31 @@ type G2<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::G2Affine;
 type Fr<P: ThresholdEncryptionParameters> =
     <<P::E as PairingEngine>::G1Affine as AffineCurve>::ScalarField;
 
+pub mod ark_serde {
+    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+    use serde_bytes::{Deserialize, Serialize};
+
+    pub fn serialize<S, T>(data: &T, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+        T: CanonicalSerialize,
+    {
+        use serde::ser::Error;
+        let mut bytes = vec![];
+        data.serialize(&mut bytes).map_err(S::Error::custom)?;
+        serde_bytes::Bytes::new(&bytes).serialize(serializer)
+    }
+    pub fn deserialize<'d, D, T>(deserializer: D) -> Result<T, D::Error>
+    where
+        D: serde::Deserializer<'d>,
+        T: CanonicalDeserialize,
+    {
+        use serde::de::Error;
+        let bytes = <serde_bytes::ByteBuf>::deserialize(deserializer)?;
+        T::deserialize(bytes.as_slice()).map_err(D::Error::custom)
+    }
+}
+
 pub fn mock_hash<T: ark_serialize::CanonicalDeserialize>(message: &[u8]) -> T {
     let mut point_ser: Vec<u8> = Vec::new();
     let point = htp_bls12381_g2(message);
@@ -33,28 +59,41 @@ pub trait ThresholdEncryptionParameters {
     type E: PairingEngine;
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 pub struct EncryptionPubkey<P: ThresholdEncryptionParameters> {
+    #[serde(with = "ark_serde")]
     pub key: G1<P>, // Y=Y_0=x_0*P_1
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ShareVerificationPubkey<P: ThresholdEncryptionParameters> {
+    #[serde(with = "ark_serde")]
     pub decryptor_pubkeys: Vec<G1<P>>, // (Y_1 .. Y_n)
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
     pub index: usize,   // i
+    #[serde(with = "ark_serde")]
     pub privkey: Fr<P>, // x_i
+    #[serde(with = "ark_serde")]
     pub pubkey: G1<P>,  // Y_i
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Ciphertext<P: ThresholdEncryptionParameters> {
+    #[serde(with = "ark_serde")]
     pub nonce: G1<P>,        // U
     pub ciphertext: Vec<u8>, // V
+    #[serde(with = "ark_serde")]
     pub auth_tag: G2<P>,     // W
 }
 
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct DecryptionShare<P: ThresholdEncryptionParameters> {
     pub decryptor_index: usize,  // i
+    #[serde(with = "ark_serde")]
     pub decryption_share: G1<P>, // U_i = x_i*U
 }
 
@@ -303,5 +342,55 @@ mod tests {
         let mut plaintext: Vec<u8> = ciphertext.ciphertext.clone();
         share_combine(&mut plaintext, ciphertext, ad, dec_shares).unwrap();
         assert!(plaintext == msg)
+    }
+
+    #[test]
+    fn serialization_tests() {
+        let mut rng = test_rng();
+        let threshold = 3;
+        let num_keys = 5;
+        let (epk, svp, privkeys) = generate_keys::<TestingParameters, ark_std::rand::rngs::StdRng>(
+            threshold, num_keys, &mut rng,
+        );
+
+        let epk_ser = bincode::serialize(&epk).unwrap();
+        let epk_new: EncryptionPubkey<TestingParameters> = bincode::deserialize(&epk_ser).unwrap();
+        assert!(epk_new.key == epk.key);
+
+        let svp_ser = bincode::serialize(&svp).unwrap();
+        let svp_new: ShareVerificationPubkey<TestingParameters> = bincode::deserialize(&svp_ser).unwrap();
+        assert!(svp_new.decryptor_pubkeys == svp.decryptor_pubkeys);
+
+        let privkeys_ser = bincode::serialize(&privkeys).unwrap();
+        let privkeys_new: Vec<PrivkeyShare<TestingParameters>> = bincode::deserialize(&privkeys_ser).unwrap();
+        for p in privkeys.iter().zip(privkeys_new.iter())
+        {
+            let (p1, p2) = p;
+            assert!(p1.index == p2.index);
+            assert!(p1.privkey == p2.privkey);
+            assert!(p1.pubkey == p2.pubkey);
+        }
+
+        let msg: &[u8] = "abc".as_bytes();
+        let ad: &[u8] = "".as_bytes();
+        let ciphertext = epk.encrypt_msg(msg, ad, &mut rng);
+        let ciphertext_ser = bincode::serialize(&ciphertext).unwrap();
+        let ciphertext_new: Ciphertext<TestingParameters> = bincode::deserialize(&ciphertext_ser).unwrap();
+        assert!(ciphertext_new.nonce == ciphertext.nonce);
+        assert!(ciphertext_new.ciphertext == ciphertext.ciphertext);
+        assert!(ciphertext_new.auth_tag == ciphertext.auth_tag);
+
+        let mut dec_shares: Vec<DecryptionShare<TestingParameters>> = Vec::new();
+        for i in 0..num_keys {
+            dec_shares.push(privkeys[i].create_share(&ciphertext, ad).unwrap());
+        }
+        let dec_shares_ser = bincode::serialize(&dec_shares).unwrap();
+        let dec_shares_new: Vec<DecryptionShare<TestingParameters>> = bincode::deserialize(&dec_shares_ser).unwrap();
+        for sh in dec_shares.iter().zip(dec_shares_new.iter())
+        {
+            let (sh1, sh2) = sh;
+            assert!(sh1.decryptor_index ==sh2.decryptor_index);
+            assert!(sh1.decryption_share ==sh2.decryption_share);
+        }
     }
 }
