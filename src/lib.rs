@@ -24,6 +24,8 @@ type G2<P: ThresholdEncryptionParameters> = <P::E as PairingEngine>::G2Affine;
 type Fr<P: ThresholdEncryptionParameters> =
     <<P::E as PairingEngine>::G1Affine as AffineCurve>::ScalarField;
 
+const PLAINTEXT_VALIDITY_HASH_SIZE: usize = 32;
+
 pub mod ark_serde {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use serde_bytes::{Deserialize, Serialize};
@@ -112,9 +114,9 @@ pub enum ThresholdEncryptionError {
     /// Hashing to curve failed
     #[error("Could not hash to curve")]
     HashToCurveError,
-    // Serialization error in Zexe
-    // #[error(transparent)]
-    // SerializationError(#[from] algebra::SerializationError),
+
+    #[error("plaintext verification failed")]
+    PlaintextVerificationFailed,
 }
 
 /// Computes the ROM-heuristic hash `H(U, V, additional data) -> G2`,
@@ -164,8 +166,18 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         let chacha_nonce = Nonce::from_slice(b"secret nonce");
         let mut cipher = ChaCha20::new(Key::from_slice(&prf_key_32), chacha_nonce);
 
+        // Calculate message hash needed for post-decryption plaintext validation
+        let mut hasher = VarBlake2b::new(PLAINTEXT_VALIDITY_HASH_SIZE).unwrap();
+        let mut msg_digest = [0u8; PLAINTEXT_VALIDITY_HASH_SIZE];
+        hasher.update(msg);
+        hasher.finalize_variable(|p| msg_digest.clone_from_slice(p));
+
         // Encrypt the message
-        let mut stream_ciphertext = msg.to_vec();
+        let mut stream_ciphertext = msg_digest
+            .to_vec()
+            .into_iter()
+            .chain(msg.to_vec().into_iter())
+            .collect::<Vec<u8>>();
         cipher.apply_keystream(&mut stream_ciphertext);
 
         // Create the authentication tag
@@ -259,11 +271,30 @@ impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
     }
 }
 
-fn share_combine_no_check<P: ThresholdEncryptionParameters>(
-    plaintext: &mut [u8],
+fn plaintext_validity_check(plaintext: &mut [u8]) -> Result<&mut [u8], ThresholdEncryptionError> {
+    if plaintext.len() < PLAINTEXT_VALIDITY_HASH_SIZE {
+        return Err(ThresholdEncryptionError::PlaintextVerificationFailed);
+    }
+
+    let msg_digest_in = &plaintext.to_vec()[0..PLAINTEXT_VALIDITY_HASH_SIZE];
+    let mut msg_digest_calc = [0u8; PLAINTEXT_VALIDITY_HASH_SIZE];
+
+    let mut hasher = VarBlake2b::new(PLAINTEXT_VALIDITY_HASH_SIZE).unwrap();
+    let msg = &plaintext.to_vec()[32..];
+    hasher.update(msg);
+    hasher.finalize_variable(|p| msg_digest_calc.clone_from_slice(p));
+
+    if msg_digest_calc != msg_digest_in {
+        return Err(ThresholdEncryptionError::PlaintextVerificationFailed);
+    }
+    // Strip off digest from message
+    Ok(&mut plaintext[PLAINTEXT_VALIDITY_HASH_SIZE..])
+}
+
+fn share_combine_no_check<'a, P: ThresholdEncryptionParameters>(
     c: &Ciphertext<P>,
     shares: &Vec<DecryptionShare<P>>,
-) -> Result<(), ThresholdEncryptionError> {
+) -> Result<Vec<u8>, ThresholdEncryptionError> {
     let mut stream_cipher_key_curve_elem: G1<P> = G1::<P>::zero();
     for j in shares.iter() {
         let mut lagrange_coeff: Fr<P> = Fr::<P>::one();
@@ -292,34 +323,38 @@ fn share_combine_no_check<P: ThresholdEncryptionParameters>(
     let chacha_nonce = Nonce::from_slice(b"secret nonce");
     let mut cipher = ChaCha20::new(Key::from_slice(&prf_key_32), chacha_nonce);
 
-    plaintext.clone_from_slice(&c.ciphertext[..]);
-    cipher.apply_keystream(plaintext);
+    let mut plaintext = Vec::with_capacity(c.ciphertext.len());
+    for _ in 0..c.ciphertext.len() {
+        plaintext.push(Default::default());
+    }
 
-    Ok(())
+    plaintext.clone_from_slice(&c.ciphertext[..]);
+    cipher.apply_keystream(&mut plaintext);
+    plaintext = plaintext_validity_check(&mut plaintext).unwrap().to_vec();
+
+    Ok(plaintext)
 }
 
-pub fn share_combine<P: ThresholdEncryptionParameters>(
-    plaintext: &mut [u8],
+pub fn share_combine<'a, P: ThresholdEncryptionParameters>(
     c: Ciphertext<P>,
     additional_data: &[u8],
     shares: Vec<DecryptionShare<P>>,
-) -> Result<(), ThresholdEncryptionError> {
+) -> Result<Vec<u8>, ThresholdEncryptionError> {
     let res = c.check_ciphertext_validity(additional_data);
     if res == false {
         return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
     }
 
-    share_combine_no_check(plaintext, &c, &shares).unwrap();
+    let plaintext = share_combine_no_check(&c, &shares).unwrap();
 
-    Ok(())
+    Ok(plaintext.to_vec())
 }
 
-pub fn batch_share_combine<P: ThresholdEncryptionParameters>(
-    plaintexts: &mut Vec<&mut [u8]>,
+pub fn batch_share_combine<'a, P: ThresholdEncryptionParameters>(
     ciphertexts: Vec<Ciphertext<P>>,
     additional_data: Vec<&[u8]>,
     shares: Vec<Vec<DecryptionShare<P>>>,
-) -> Result<(), ThresholdEncryptionError> {
+) -> Result<Vec<Vec<u8>>, ThresholdEncryptionError> {
     // We first check for ciphertext validity across ciphertexts: `e(P, W_1) * e(U_1, H1) * e(P, W_2) * e(U_2, H2) * ...`
     // We use an optimisation based on the billinearity property that implies: `\prod{e(P, W_i)} = e(P, \sum{W_i})`
     let g_inv = -G1::<P>::prime_subgroup_generator();
@@ -343,10 +378,12 @@ pub fn batch_share_combine<P: ThresholdEncryptionParameters>(
     }
 
     // Decrypting each ciphertext
-    for ((p, c), sh) in plaintexts.into_iter().zip(ciphertexts.iter()).zip(shares.iter()) {
-        share_combine_no_check(p, c, sh).unwrap();
+    let mut plaintexts: Vec<Vec<u8>> = Vec::with_capacity(ciphertexts.len());
+    for (c, sh) in ciphertexts.iter().zip(shares.iter())
+    {
+        plaintexts.push(share_combine_no_check( c, sh).unwrap().to_vec());
     }
-    Ok(())
+    Ok(plaintexts)
 }
 
 pub fn batch_check_ciphertext_validity(additional_data: &[u8]) -> bool {
@@ -387,8 +424,7 @@ mod tests {
             assert!(dec_shares[i].verify_share(&ciphertext, ad, &svp));
         }
 
-        let mut plaintext: Vec<u8> = ciphertext.ciphertext.clone();
-        share_combine(&mut plaintext, ciphertext, ad, dec_shares).unwrap();
+        let plaintext = share_combine(ciphertext, ad, dec_shares).unwrap();
         assert!(plaintext == msg)
     }
 
@@ -457,11 +493,9 @@ mod tests {
 
         let mut messages: Vec<[u8; 8]> = vec![];
         let mut ad: Vec<&[u8]> = vec![];
-        let mut plaintexts: Vec<&mut [u8]> = Vec::with_capacity(num_of_msgs);
         let mut ciphertexts: Vec<Ciphertext<TestingParameters>> = vec![];
-        let dec_shares:Vec<Vec<DecryptionShare<TestingParameters>>> = vec![];
+        let mut dec_shares: Vec<Vec<DecryptionShare<TestingParameters>>> = Vec::with_capacity(ciphertexts.len());
         for j in 0..num_of_msgs {
-
             ad.push("".as_bytes());
             let mut msg: [u8; 8] = [0u8; 8];
             rng.fill_bytes(&mut msg);
@@ -469,16 +503,17 @@ mod tests {
 
             ciphertexts.push(epk.encrypt_msg(&messages[j], ad[j], &mut rng));
 
-            let mut dec_shares: Vec<DecryptionShare<TestingParameters>> = Vec::new();
+            dec_shares.push(Vec::with_capacity(num_keys));
             for i in 0..num_keys {
-                dec_shares.push(privkeys[i].create_share(&ciphertexts[j], ad[j]).unwrap());
-                assert!(dec_shares[i].verify_share(&ciphertexts[j], ad[j], &svp));
+                dec_shares[j].push(privkeys[i].create_share(&ciphertexts[j], ad[j]).unwrap());
+                assert!(dec_shares[j][i].verify_share(&ciphertexts[j], ad[j], &svp));
             }
         }
 
-        batch_share_combine(&mut plaintexts, ciphertexts, ad, dec_shares).unwrap();
-        for (p,m) in plaintexts.into_iter().zip(messages) {
-            assert!(p == m)
+        let plaintexts = batch_share_combine(ciphertexts, ad, dec_shares).unwrap();
+        assert!(plaintexts.len() != 0);
+        for (p, m) in plaintexts.into_iter().zip(messages) {
+            assert!(*p == m)
         }
     }
 }
