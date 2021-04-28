@@ -7,7 +7,6 @@ use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
 use chacha20::{ChaCha20, Key, Nonce};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
-use std::pin::Pin;
 use std::vec;
 use zeroize::Zeroize;
 
@@ -206,7 +205,6 @@ impl<P: ThresholdEncryptionParameters> Ciphertext<P> {
     }
 }
 
-// TODO: Learn how rust crypto libraries handle private keys
 impl<P: ThresholdEncryptionParameters> PrivkeyShare<P> {
     pub fn create_share(
         &self,
@@ -232,7 +230,7 @@ impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
         vpk: &ShareVerificationPubkey<P>,
         additional_data: &[u8],
     ) -> bool {
-        // e(Ui,H) ?= e(Yi,W) => e(-Ui,H)*e(Yi,W) ?= 1
+        // We use the fact that e(Ui,H) ?= e(Yi,W) => e(-Ui,H)*e(Yi,W) ?= 1
         let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], additional_data);
         let pairing_prod_result = P::E::product_of_pairings(&[
             ((-self.decryption_share).into(), tag_hash.into()),
@@ -261,17 +259,11 @@ impl<P: ThresholdEncryptionParameters> DecryptionShare<P> {
     }
 }
 
-pub fn share_combine<P: ThresholdEncryptionParameters>(
+fn share_combine_no_check<P: ThresholdEncryptionParameters>(
     plaintext: &mut [u8],
-    c: Ciphertext<P>,
-    additional_data: &[u8],
-    shares: Vec<DecryptionShare<P>>,
+    c: &Ciphertext<P>,
+    shares: &Vec<DecryptionShare<P>>,
 ) -> Result<(), ThresholdEncryptionError> {
-    let res = c.check_ciphertext_validity(additional_data);
-    if res == false {
-        return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
-    }
-
     let mut stream_cipher_key_curve_elem: G1<P> = G1::<P>::zero();
     for j in shares.iter() {
         let mut lagrange_coeff: Fr<P> = Fr::<P>::one();
@@ -303,6 +295,57 @@ pub fn share_combine<P: ThresholdEncryptionParameters>(
     plaintext.clone_from_slice(&c.ciphertext[..]);
     cipher.apply_keystream(plaintext);
 
+    Ok(())
+}
+
+pub fn share_combine<P: ThresholdEncryptionParameters>(
+    plaintext: &mut [u8],
+    c: Ciphertext<P>,
+    additional_data: &[u8],
+    shares: Vec<DecryptionShare<P>>,
+) -> Result<(), ThresholdEncryptionError> {
+    let res = c.check_ciphertext_validity(additional_data);
+    if res == false {
+        return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
+    }
+
+    share_combine_no_check(plaintext, &c, &shares).unwrap();
+
+    Ok(())
+}
+
+pub fn batch_share_combine<P: ThresholdEncryptionParameters>(
+    plaintexts: &mut Vec<&mut [u8]>,
+    ciphertexts: Vec<Ciphertext<P>>,
+    additional_data: Vec<&[u8]>,
+    shares: Vec<Vec<DecryptionShare<P>>>,
+) -> Result<(), ThresholdEncryptionError> {
+    // We first check for ciphertext validity across ciphertexts: `e(P, W_1) * e(U_1, H1) * e(P, W_2) * e(U_2, H2) * ...`
+    // We use an optimisation based on the billinearity property that implies: `\prod{e(P, W_i)} = e(P, \sum{W_i})`
+    let g_inv = -G1::<P>::prime_subgroup_generator();
+    let mut pairing_product: Vec<(
+        <P::E as PairingEngine>::G1Prepared,
+        <P::E as PairingEngine>::G2Prepared,
+    )> = vec![];
+    let mut auth_tag_sum: <P::E as PairingEngine>::G2Affine =
+        <P::E as PairingEngine>::G2Affine::zero();
+    for (c, ad) in ciphertexts.iter().zip(additional_data.iter()) {
+        let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], ad);
+        pairing_product.push((c.nonce.into(), tag_hash.into()));
+        auth_tag_sum = auth_tag_sum + c.auth_tag;
+    }
+    pairing_product.push((g_inv.into(), auth_tag_sum.into()));
+
+    let pairing_prod_result = P::E::product_of_pairings(&pairing_product[..]);
+    if pairing_prod_result != <<P as ThresholdEncryptionParameters>::E as PairingEngine>::Fqk::one()
+    {
+        return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
+    }
+
+    // Decrypting each ciphertext
+    for ((p, c), sh) in plaintexts.into_iter().zip(ciphertexts.iter()).zip(shares.iter()) {
+        share_combine_no_check(p, c, sh).unwrap();
+    }
     Ok(())
 }
 
@@ -398,6 +441,44 @@ mod tests {
             let (sh1, sh2) = sh;
             assert!(sh1.decryptor_index == sh2.decryptor_index);
             assert!(sh1.decryption_share == sh2.decryption_share);
+        }
+    }
+
+    #[test]
+    fn batch_share_combine_test() {
+        let mut rng = test_rng();
+        let threshold = 3;
+        let num_keys = 5;
+        let num_of_msgs = 4;
+
+        let (epk, svp, privkeys) = generate_keys::<TestingParameters, ark_std::rand::rngs::StdRng>(
+            threshold, num_keys, &mut rng,
+        );
+
+        let mut messages: Vec<[u8; 8]> = vec![];
+        let mut ad: Vec<&[u8]> = vec![];
+        let mut plaintexts: Vec<&mut [u8]> = Vec::with_capacity(num_of_msgs);
+        let mut ciphertexts: Vec<Ciphertext<TestingParameters>> = vec![];
+        let dec_shares:Vec<Vec<DecryptionShare<TestingParameters>>> = vec![];
+        for j in 0..num_of_msgs {
+
+            ad.push("".as_bytes());
+            let mut msg: [u8; 8] = [0u8; 8];
+            rng.fill_bytes(&mut msg);
+            messages.push(msg.clone());
+
+            ciphertexts.push(epk.encrypt_msg(&messages[j], ad[j], &mut rng));
+
+            let mut dec_shares: Vec<DecryptionShare<TestingParameters>> = Vec::new();
+            for i in 0..num_keys {
+                dec_shares.push(privkeys[i].create_share(&ciphertexts[j], ad[j]).unwrap());
+                assert!(dec_shares[i].verify_share(&ciphertexts[j], ad[j], &svp));
+            }
+        }
+
+        batch_share_combine(&mut plaintexts, ciphertexts, ad, dec_shares).unwrap();
+        for (p,m) in plaintexts.into_iter().zip(messages) {
+            assert!(p == m)
         }
     }
 }
