@@ -379,9 +379,8 @@ pub fn batch_share_combine<'a, P: ThresholdEncryptionParameters>(
 
     // Decrypting each ciphertext
     let mut plaintexts: Vec<Vec<u8>> = Vec::with_capacity(ciphertexts.len());
-    for (c, sh) in ciphertexts.iter().zip(shares.iter())
-    {
-        plaintexts.push(share_combine_no_check( c, sh).unwrap().to_vec());
+    for (c, sh) in ciphertexts.iter().zip(shares.iter()) {
+        plaintexts.push(share_combine_no_check(c, sh).unwrap().to_vec());
     }
     Ok(plaintexts)
 }
@@ -494,7 +493,8 @@ mod tests {
         let mut messages: Vec<[u8; 8]> = vec![];
         let mut ad: Vec<&[u8]> = vec![];
         let mut ciphertexts: Vec<Ciphertext<TestingParameters>> = vec![];
-        let mut dec_shares: Vec<Vec<DecryptionShare<TestingParameters>>> = Vec::with_capacity(ciphertexts.len());
+        let mut dec_shares: Vec<Vec<DecryptionShare<TestingParameters>>> =
+            Vec::with_capacity(ciphertexts.len());
         for j in 0..num_of_msgs {
             ad.push("".as_bytes());
             let mut msg: [u8; 8] = [0u8; 8];
