@@ -13,11 +13,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: rustlang/rust
+      image: rustlang/rust:nightly
     steps:
     - uses: actions/checkout@v2
-    - name: Format
-      run: cargo fmt
     - name: Build
       run: cargo build --verbose
     - name: Run tests
