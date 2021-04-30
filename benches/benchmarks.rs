@@ -98,14 +98,14 @@ pub fn bench_decryption(c: &mut Criterion) {
     group.bench_function("share_combine_bench: threshold 08 - #msg 100", |b| b.iter(|| share_combine_bench(08, 100)));
 
     group.bench_function("batch_share_combine: threshold 08 - #msg 001", |b| b.iter(|| batch_share_combine_bench(08, 1)));
-    group.measurement_time(core::time::Duration::new(30, 0));
-    group.bench_function("batch_share_combine: threshold 08 - #msg 010", |b| b.iter(|| batch_share_combine_bench(08, 10)));
     group.measurement_time(core::time::Duration::new(60, 0));
+    group.bench_function("batch_share_combine: threshold 08 - #msg 010", |b| b.iter(|| batch_share_combine_bench(08, 10)));
+    group.measurement_time(core::time::Duration::new(500, 0));
     group.bench_function("batch_share_combine: threshold 08 - #msg 100", |b| b.iter(|| batch_share_combine_bench(08, 100)));
 
-    group.measurement_time(core::time::Duration::new(60, 0));
+    group.measurement_time(core::time::Duration::new(500, 0));
     group.bench_function("share_combine_bench: threshold 08 - #msg 1000", |b| b.iter(|| share_combine_bench(08, 1000)));
-    group.measurement_time(core::time::Duration::new(60, 0));
+    group.measurement_time(core::time::Duration::new(500, 0));
     group.bench_function("batch_share_combine: threshold 08 - #msg 1000", |b| b.iter(|| batch_share_combine_bench(08, 1000)));
 }
 
