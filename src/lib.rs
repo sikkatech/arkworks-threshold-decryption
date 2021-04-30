@@ -68,13 +68,13 @@ pub struct EncryptionPubkey<P: ThresholdEncryptionParameters> {
     pub key: G1<P>, // Y=Y_0=x_0*P_1
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ShareVerificationPubkey<P: ThresholdEncryptionParameters> {
     #[serde(with = "ark_serde")]
     pub decryptor_pubkeys: Vec<G1<P>>, // (Y_1 .. Y_n)
 }
 
-#[derive(Serialize, Deserialize, Clone, Zeroize)]
+#[derive(Serialize, Deserialize, Clone, Zeroize, Debug)]
 pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
     pub index: usize, // i
     #[serde(with = "ark_serde")]
@@ -84,7 +84,7 @@ pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
     pub pubkey: G1<P>, // Y_i
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Ciphertext<P: ThresholdEncryptionParameters> {
     #[serde(with = "ark_serde")]
     pub nonce: G1<P>, // U
@@ -93,7 +93,7 @@ pub struct Ciphertext<P: ThresholdEncryptionParameters> {
     pub auth_tag: G2<P>, // W
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone ,Debug)]
 pub struct DecryptionShare<P: ThresholdEncryptionParameters> {
     pub decryptor_index: usize, // i
     #[serde(with = "ark_serde")]
