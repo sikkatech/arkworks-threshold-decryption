@@ -7,6 +7,8 @@ pub fn bench_decryption(c: &mut Criterion) {
     use rand::SeedableRng;
     use rand_core::RngCore;
 
+    const NUM_OF_TX: usize = 1000;
+
     #[derive(Debug, Clone)]
     pub struct TestingParameters {}
 
@@ -20,14 +22,14 @@ pub fn bench_decryption(c: &mut Criterion) {
             threshold, threshold, &mut rng,
         );
 
-        let mut messages: Vec<[u8; 8]> = vec![];
+        let mut messages: Vec<[u8; NUM_OF_TX]> = vec![];
         let mut ad: Vec<&[u8]> = vec![];
         let mut ciphertexts: Vec<Ciphertext<TestingParameters>> = vec![];
         let mut dec_shares: Vec<Vec<DecryptionShare<TestingParameters>>> =
             Vec::with_capacity(ciphertexts.len());
         for j in 0..num_of_msgs {
             ad.push("".as_bytes());
-            let mut msg: [u8; 8] = [0u8; 8];
+            let mut msg: [u8; NUM_OF_TX] = [0u8; NUM_OF_TX];
             rng.fill_bytes(&mut msg);
             messages.push(msg.clone());
 
@@ -68,14 +70,14 @@ pub fn bench_decryption(c: &mut Criterion) {
             dec_shares[i].verify_share(&ciphertext, ad, &svp);
         }
 
-        let mut messages: Vec<[u8; 8]> = vec![];
+        let mut messages: Vec<[u8; NUM_OF_TX]> = vec![];
         let mut ad: Vec<&[u8]> = vec![];
         let mut ciphertexts: Vec<Ciphertext<TestingParameters>> = vec![];
         let mut dec_shares: Vec<Vec<DecryptionShare<TestingParameters>>> =
             Vec::with_capacity(ciphertexts.len());
         for j in 0..num_of_msgs {
             ad.push("".as_bytes());
-            let mut msg: [u8; 8] = [0u8; 8];
+            let mut msg: [u8; NUM_OF_TX] = [0u8; NUM_OF_TX];
             rng.fill_bytes(&mut msg);
             messages.push(msg.clone());
 
