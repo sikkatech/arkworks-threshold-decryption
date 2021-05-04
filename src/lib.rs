@@ -226,7 +226,7 @@ impl<P: ThresholdEncryptionParameters> PrivkeyShare<P> {
         additional_data: &[u8],
     ) -> Result<DecryptionShare<P>, ThresholdEncryptionError> {
         let res = c.check_ciphertext_validity(additional_data);
-        if res == false {
+        if !res {
             return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
         }
         let decryption_share = c.nonce.mul(self.privkey).into();
@@ -305,7 +305,7 @@ fn share_combine_no_check<'a, P: ThresholdEncryptionParameters>(
         for i in shares.iter() {
             let ii = <Fr<P> as From<u64>>::from(i.decryptor_index as u64);
             if ii != ji {
-                lagrange_coeff = lagrange_coeff * ((Fr::<P>::zero() - (ii)) / (ji - ii));
+                lagrange_coeff *= (Fr::<P>::zero() - (ii)) / (ji - ii);
             }
         }
 
@@ -348,7 +348,7 @@ pub fn share_combine<'a, P: ThresholdEncryptionParameters>(
     shares: Vec<DecryptionShare<P>>,
 ) -> Result<Vec<u8>, ThresholdEncryptionError> {
     let res = c.check_ciphertext_validity(additional_data);
-    if res == false {
+    if !res {
         return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
     }
 
@@ -357,7 +357,7 @@ pub fn share_combine<'a, P: ThresholdEncryptionParameters>(
     Ok(plaintext.to_vec())
 }
 
-pub fn batch_share_combine<'a, P: ThresholdEncryptionParameters>(
+pub fn batch_share_combine<P: ThresholdEncryptionParameters>(
     ciphertexts: Vec<Ciphertext<P>>,
     additional_data: Vec<&[u8]>,
     shares: Vec<Vec<DecryptionShare<P>>>,
