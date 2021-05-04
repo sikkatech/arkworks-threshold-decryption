@@ -40,3 +40,6 @@ harness = false
 
 [profile.test]
 opt-level = 3
+
+[profile.bench]
+opt-level = 3
