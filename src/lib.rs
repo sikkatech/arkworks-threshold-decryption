@@ -385,17 +385,16 @@ pub fn batch_share_combine<'a, P: 'static + ThresholdEncryptionParameters>(
 
     // Decrypting each ciphertext
     let mut plaintexts: Vec<Vec<u8>> = Vec::with_capacity(ciphertexts.len());
-    use std::thread;
-    use std::sync::{Arc};
+    use crossbeam_utils::thread;
 
-    let mut handle = thread::spawn(|| -> Vec<u8> { Default::default() });
     for (c, sh) in ciphertexts.iter().zip(shares.iter()) {
-        let c_arc = Arc::new(c);
-        let sh_arc = Arc::new(sh);
-        handle = thread::spawn(|| -> Vec<u8> { share_combine_no_check(*c_arc, *sh_arc).unwrap().to_vec() });
-        // plaintexts.push(share_combine_no_check(c, sh).unwrap().to_vec());
+        thread::scope(|s| {
+            let handle = s.spawn(|_| {
+                    plaintexts.push(share_combine_no_check(c, sh).unwrap().to_vec());
+                });
+            handle.join().unwrap();
+        }).unwrap();
     }
-    handle.join().unwrap();
     Ok(plaintexts)
 }
 
