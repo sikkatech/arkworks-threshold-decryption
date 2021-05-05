@@ -6,6 +6,7 @@ use ark_serialize::CanonicalSerialize;
 use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
 use chacha20::{ChaCha20, Key, Nonce};
 use rand_core::RngCore;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::vec;
 use zeroize::Zeroize;
@@ -370,6 +371,7 @@ pub fn batch_share_combine<'a, P: 'static + ThresholdEncryptionParameters>(
     )> = vec![];
     let mut auth_tag_sum: <P::E as PairingEngine>::G2Affine =
         <P::E as PairingEngine>::G2Affine::zero();
+
     for (c, ad) in ciphertexts.iter().zip(additional_data.iter()) {
         let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], ad);
         pairing_product.push((c.nonce.into(), tag_hash.into()));
@@ -385,20 +387,10 @@ pub fn batch_share_combine<'a, P: 'static + ThresholdEncryptionParameters>(
 
     // Decrypting each ciphertext
     let mut plaintexts: Vec<Vec<u8>> = Vec::with_capacity(ciphertexts.len());
-    // let plaintexts = Arc::new(Mutex::new(Vec::new()));
-
-    use rayon::prelude::*;
     ciphertexts
         .par_iter()
         .zip(shares.par_iter())
-        .map(|(c, sh)| {
-            // (*plaintexts)
-            // .lock()
-            // .unwrap()
-            // .push(
-            share_combine_no_check(c, sh).unwrap().to_vec()
-            // )
-        })
+        .map(|(c, sh)| share_combine_no_check(c, sh).unwrap().to_vec())
         .collect_into_vec(&mut plaintexts);
 
     Ok(plaintexts)
