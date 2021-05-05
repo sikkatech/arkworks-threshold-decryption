@@ -90,7 +90,7 @@ pub struct Ciphertext<P: ThresholdEncryptionParameters> {
     pub auth_tag: G2<P>, // W
 }
 
-#[derive(Serialize, Deserialize, Clone ,Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptionShare<P: ThresholdEncryptionParameters> {
     pub decryptor_index: usize, // i
     #[serde(with = "ark_serde")]
@@ -317,7 +317,6 @@ fn share_combine_no_check<'a, P: ThresholdEncryptionParameters>(
     let mut prf_key = Vec::new();
     stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
 
-
     let mut blake_params = blake2b_simd::Params::new();
     blake_params.hash_length(32);
     let mut hasher = blake_params.to_state();
@@ -357,7 +356,7 @@ pub fn share_combine<'a, P: ThresholdEncryptionParameters>(
     Ok(plaintext.to_vec())
 }
 
-pub fn batch_share_combine<P: ThresholdEncryptionParameters>(
+pub fn batch_share_combine<'a, P: 'static + ThresholdEncryptionParameters>(
     ciphertexts: Vec<Ciphertext<P>>,
     additional_data: Vec<&[u8]>,
     shares: Vec<Vec<DecryptionShare<P>>>,
@@ -386,9 +385,17 @@ pub fn batch_share_combine<P: ThresholdEncryptionParameters>(
 
     // Decrypting each ciphertext
     let mut plaintexts: Vec<Vec<u8>> = Vec::with_capacity(ciphertexts.len());
+    use std::thread;
+    use std::sync::{Arc};
+
+    let mut handle = thread::spawn(|| -> Vec<u8> { Default::default() });
     for (c, sh) in ciphertexts.iter().zip(shares.iter()) {
-        plaintexts.push(share_combine_no_check(c, sh).unwrap().to_vec());
+        let c_arc = Arc::new(c);
+        let sh_arc = Arc::new(sh);
+        handle = thread::spawn(|| -> Vec<u8> { share_combine_no_check(*c_arc, *sh_arc).unwrap().to_vec() });
+        // plaintexts.push(share_combine_no_check(c, sh).unwrap().to_vec());
     }
+    handle.join().unwrap();
     Ok(plaintexts)
 }
 
