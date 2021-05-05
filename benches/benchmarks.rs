@@ -145,6 +145,7 @@ pub fn bench_decryption(c: &mut Criterion) {
         b.iter(|| a())
     });
 
+    // Benchmarking for larger number of messages
     let a = share_combine_bench(08, 1000);
     group.measurement_time(core::time::Duration::new(500, 0));
     group.bench_function("share_combine_bench: threshold 08 - #msg 1000", |b| {

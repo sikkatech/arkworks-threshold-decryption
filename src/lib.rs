@@ -9,7 +9,6 @@ use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use std::vec;
 use zeroize::Zeroize;
-use crossbeam_utils::thread;
 
 use log::error;
 use thiserror::Error;
@@ -386,18 +385,21 @@ pub fn batch_share_combine<'a, P: 'static + ThresholdEncryptionParameters>(
 
     // Decrypting each ciphertext
     let mut plaintexts: Vec<Vec<u8>> = Vec::with_capacity(ciphertexts.len());
-    let mut results = Vec::new();
-    thread::scope(|s| {
-        // let mut handles: Vec<> = vec![];
-        for (c, sh) in ciphertexts.iter().zip(shares.iter()) {
-            results.push(s.spawn(|_| {
-                share_combine_no_check(c, sh).unwrap().to_vec()
-            }));
-        }
-        for r in results.into_iter() {
-            plaintexts.push(r.join().unwrap());
-        }
-    }).unwrap();
+    // let plaintexts = Arc::new(Mutex::new(Vec::new()));
+
+    use rayon::prelude::*;
+    ciphertexts
+        .par_iter()
+        .zip(shares.par_iter())
+        .map(|(c, sh)| {
+            // (*plaintexts)
+            // .lock()
+            // .unwrap()
+            // .push(
+            share_combine_no_check(c, sh).unwrap().to_vec()
+            // )
+        })
+        .collect_into_vec(&mut plaintexts);
 
     Ok(plaintexts)
 }
