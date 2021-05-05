@@ -6,15 +6,13 @@ use ark_serialize::CanonicalSerialize;
 use chacha20::cipher::{NewStreamCipher, SyncStreamCipher};
 use chacha20::{ChaCha20, Key, Nonce};
 use rand_core::RngCore;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::vec;
 use zeroize::Zeroize;
 
 use log::error;
 use thiserror::Error;
-
-use blake2::digest::{Update, VariableOutput};
-use blake2::VarBlake2b;
 
 mod hash_to_curve;
 pub mod key_generation;
@@ -68,13 +66,13 @@ pub struct EncryptionPubkey<P: ThresholdEncryptionParameters> {
     pub key: G1<P>, // Y=Y_0=x_0*P_1
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ShareVerificationPubkey<P: ThresholdEncryptionParameters> {
     #[serde(with = "ark_serde")]
     pub decryptor_pubkeys: Vec<G1<P>>, // (Y_1 .. Y_n)
 }
 
-#[derive(Serialize, Deserialize, Clone, Zeroize)]
+#[derive(Serialize, Deserialize, Clone, Zeroize, Debug)]
 pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
     pub index: usize, // i
     #[serde(with = "ark_serde")]
@@ -84,7 +82,7 @@ pub struct PrivkeyShare<P: ThresholdEncryptionParameters> {
     pub pubkey: G1<P>, // Y_i
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Ciphertext<P: ThresholdEncryptionParameters> {
     #[serde(with = "ark_serde")]
     pub nonce: G1<P>, // U
@@ -93,7 +91,7 @@ pub struct Ciphertext<P: ThresholdEncryptionParameters> {
     pub auth_tag: G2<P>, // W
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct DecryptionShare<P: ThresholdEncryptionParameters> {
     pub decryptor_index: usize, // i
     #[serde(with = "ark_serde")]
@@ -156,10 +154,13 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         // TODO: Use stream cipher Trait
         let mut prf_key = Vec::new();
         stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
-        let mut hasher = VarBlake2b::new(32).unwrap();
-        hasher.update(prf_key);
+
+        let mut blake_params = blake2b_simd::Params::new();
+        blake_params.hash_length(32);
+        let mut hasher = blake_params.to_state();
+        prf_key.write(&mut hasher).unwrap();
         let mut prf_key_32 = [0u8; 32];
-        hasher.finalize_variable(|p| prf_key_32.clone_from_slice(p));
+        prf_key_32.clone_from_slice(hasher.finalize().as_bytes());
 
         // This nonce doesn't matter, as we never have key re-use.
         // We keep it fixed to minimize the data transmitted.
@@ -167,10 +168,12 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         let mut cipher = ChaCha20::new(Key::from_slice(&prf_key_32), chacha_nonce);
 
         // Calculate message hash needed for post-decryption plaintext validation
-        let mut hasher = VarBlake2b::new(PLAINTEXT_VALIDITY_HASH_SIZE).unwrap();
+        let mut blake_params = blake2b_simd::Params::new();
+        blake_params.hash_length(PLAINTEXT_VALIDITY_HASH_SIZE);
+        let mut hasher = blake_params.to_state();
+        msg.write(&mut hasher).unwrap();
         let mut msg_digest = [0u8; PLAINTEXT_VALIDITY_HASH_SIZE];
-        hasher.update(msg);
-        hasher.finalize_variable(|p| msg_digest.clone_from_slice(p));
+        msg_digest.clone_from_slice(hasher.finalize().as_bytes());
 
         // Encrypt the message
         let mut stream_ciphertext = msg_digest
@@ -224,7 +227,7 @@ impl<P: ThresholdEncryptionParameters> PrivkeyShare<P> {
         additional_data: &[u8],
     ) -> Result<DecryptionShare<P>, ThresholdEncryptionError> {
         let res = c.check_ciphertext_validity(additional_data);
-        if res == false {
+        if !res {
             return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
         }
         let decryption_share = c.nonce.mul(self.privkey).into();
@@ -277,12 +280,13 @@ fn plaintext_validity_check(plaintext: &mut [u8]) -> Result<&mut [u8], Threshold
     }
 
     let msg_digest_in = &plaintext.to_vec()[0..PLAINTEXT_VALIDITY_HASH_SIZE];
-    let mut msg_digest_calc = [0u8; PLAINTEXT_VALIDITY_HASH_SIZE];
-
-    let mut hasher = VarBlake2b::new(PLAINTEXT_VALIDITY_HASH_SIZE).unwrap();
     let msg = &plaintext.to_vec()[32..];
-    hasher.update(msg);
-    hasher.finalize_variable(|p| msg_digest_calc.clone_from_slice(p));
+    let mut blake_params = blake2b_simd::Params::new();
+    blake_params.hash_length(32);
+    let mut hasher = blake_params.to_state();
+    msg.write(&mut hasher).unwrap();
+    let mut msg_digest_calc = [0u8; 32];
+    msg_digest_calc.clone_from_slice(hasher.finalize().as_bytes());
 
     if msg_digest_calc != msg_digest_in {
         return Err(ThresholdEncryptionError::PlaintextVerificationFailed);
@@ -302,7 +306,7 @@ fn share_combine_no_check<'a, P: ThresholdEncryptionParameters>(
         for i in shares.iter() {
             let ii = <Fr<P> as From<u64>>::from(i.decryptor_index as u64);
             if ii != ji {
-                lagrange_coeff = lagrange_coeff * ((Fr::<P>::zero() - (ii)) / (ji - ii));
+                lagrange_coeff *= (Fr::<P>::zero() - (ii)) / (ji - ii);
             }
         }
 
@@ -313,10 +317,13 @@ fn share_combine_no_check<'a, P: ThresholdEncryptionParameters>(
     // Calculate the chacha20 key
     let mut prf_key = Vec::new();
     stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
-    let mut hasher = VarBlake2b::new(32).unwrap();
-    hasher.update(prf_key);
+
+    let mut blake_params = blake2b_simd::Params::new();
+    blake_params.hash_length(32);
+    let mut hasher = blake_params.to_state();
+    prf_key.write(&mut hasher).unwrap();
     let mut prf_key_32 = [0u8; 32];
-    hasher.finalize_variable(|p| prf_key_32.clone_from_slice(p));
+    prf_key_32.clone_from_slice(hasher.finalize().as_bytes());
 
     // This nonce doesn't matter, as we never have key re-use.
     // We keep it fixed to minimize the data transmitted.
@@ -341,7 +348,7 @@ pub fn share_combine<'a, P: ThresholdEncryptionParameters>(
     shares: Vec<DecryptionShare<P>>,
 ) -> Result<Vec<u8>, ThresholdEncryptionError> {
     let res = c.check_ciphertext_validity(additional_data);
-    if res == false {
+    if !res {
         return Err(ThresholdEncryptionError::CiphertextVerificationFailed);
     }
 
@@ -350,7 +357,7 @@ pub fn share_combine<'a, P: ThresholdEncryptionParameters>(
     Ok(plaintext.to_vec())
 }
 
-pub fn batch_share_combine<'a, P: ThresholdEncryptionParameters>(
+pub fn batch_share_combine<'a, P: 'static + ThresholdEncryptionParameters>(
     ciphertexts: Vec<Ciphertext<P>>,
     additional_data: Vec<&[u8]>,
     shares: Vec<Vec<DecryptionShare<P>>>,
@@ -364,6 +371,7 @@ pub fn batch_share_combine<'a, P: ThresholdEncryptionParameters>(
     )> = vec![];
     let mut auth_tag_sum: <P::E as PairingEngine>::G2Affine =
         <P::E as PairingEngine>::G2Affine::zero();
+
     for (c, ad) in ciphertexts.iter().zip(additional_data.iter()) {
         let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], ad);
         pairing_product.push((c.nonce.into(), tag_hash.into()));
@@ -379,9 +387,12 @@ pub fn batch_share_combine<'a, P: ThresholdEncryptionParameters>(
 
     // Decrypting each ciphertext
     let mut plaintexts: Vec<Vec<u8>> = Vec::with_capacity(ciphertexts.len());
-    for (c, sh) in ciphertexts.iter().zip(shares.iter()) {
-        plaintexts.push(share_combine_no_check(c, sh).unwrap().to_vec());
-    }
+    ciphertexts
+        .par_iter()
+        .zip(shares.par_iter())
+        .map(|(c, sh)| share_combine_no_check(c, sh).unwrap().to_vec())
+        .collect_into_vec(&mut plaintexts);
+
     Ok(plaintexts)
 }
 
