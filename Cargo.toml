@@ -44,3 +44,6 @@ opt-level = 3
 
 [profile.bench]
 opt-level = 3
+
+[features]
+default = ["ark-ec/parallel", "ark-poly/parallel"]
