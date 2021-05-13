@@ -372,9 +372,20 @@ pub fn batch_share_combine<'a, P: 'static + ThresholdEncryptionParameters>(
     let mut auth_tag_sum: <P::E as PairingEngine>::G2Affine =
         <P::E as PairingEngine>::G2Affine::zero();
 
+    ciphertexts
+        .par_iter()
+        .zip(additional_data.par_iter())
+        .map(|(c, ad)| {
+            (
+                c.nonce.into(),
+                construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], ad).into(),
+            )
+        })
+        .collect_into_vec(&mut pairing_product);
+
     for (c, ad) in ciphertexts.iter().zip(additional_data.iter()) {
-        let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], ad);
-        pairing_product.push((c.nonce.into(), tag_hash.into()));
+        // let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], ad);
+        // pairing_product.push((c.nonce.into(), tag_hash.into()));
         auth_tag_sum = auth_tag_sum + c.auth_tag;
     }
     pairing_product.push((g_inv.into(), auth_tag_sum.into()));
