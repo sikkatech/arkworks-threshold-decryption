@@ -407,11 +407,6 @@ pub fn batch_share_combine<'a, P: 'static + ThresholdEncryptionParameters>(
     Ok(plaintexts)
 }
 
-pub fn batch_check_ciphertext_validity(additional_data: &[u8]) -> bool {
-    // TODO
-    false
-}
-
 #[cfg(test)]
 mod tests {
 
