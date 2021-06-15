@@ -556,7 +556,6 @@ mod tests {
         faulty_dec_share.decryption_share = -faulty_dec_share.decryption_share;
         assert!(!faulty_dec_share.verify_share(&ciphertext, ad, &svp));
 
-
         ciphertext.auth_tag = -ciphertext.auth_tag;
         assert!(privkeys[0].create_share(&ciphertext, ad).is_err());
 
