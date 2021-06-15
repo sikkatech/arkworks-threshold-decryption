@@ -98,8 +98,7 @@ pub struct DecryptionShare<P: ThresholdEncryptionParameters> {
     pub decryption_share: G1<P>, // U_i = x_i*U
 }
 
-#[derive(Debug, Error)]
-/// Error type
+#[derive(Debug, Error, PartialEq)]
 pub enum ThresholdEncryptionError {
     /// Error
     #[error("ciphertext verification failed")]
@@ -379,7 +378,7 @@ pub fn batch_share_combine<'a, P: 'static + ThresholdEncryptionParameters>(
         })
         .collect_into_vec(&mut pairing_product);
 
-    for (c, ad) in ciphertexts.iter().zip(additional_data.iter()) {
+    for (c, _) in ciphertexts.iter().zip(additional_data.iter()) {
         auth_tag_sum = auth_tag_sum + c.auth_tag;
     }
     pairing_product.push((g_inv.into(), auth_tag_sum.into()));
@@ -408,6 +407,7 @@ mod tests {
     use crate::*;
     use ark_std::test_rng;
 
+    #[derive(Debug)]
     pub struct TestingParameters {}
 
     impl ThresholdEncryptionParameters for TestingParameters {
@@ -526,5 +526,40 @@ mod tests {
         for (p, m) in plaintexts.into_iter().zip(messages) {
             assert!(*p == m)
         }
+    }
+
+    #[test]
+    fn error_tests() {
+        let mut rng = test_rng();
+        let threshold = 3;
+        let num_keys = 5;
+        let (epk, svp, privkeys) = generate_keys::<TestingParameters, ark_std::rand::rngs::StdRng>(
+            threshold, num_keys, &mut rng,
+        );
+
+        let msg: &[u8] = "abc".as_bytes();
+        let ad: &[u8] = "".as_bytes();
+
+        let mut ciphertext = epk.encrypt_msg(msg, ad, &mut rng);
+
+        let mut dec_shares: Vec<DecryptionShare<TestingParameters>> = Vec::new();
+        for i in 0..num_keys {
+            dec_shares.push(privkeys[i].create_share(&ciphertext, ad).unwrap());
+        }
+
+        // Force erroneous inputs and check if errors actually occur
+        let mut faulty_dec_share_index = privkeys[0].create_share(&ciphertext, ad).unwrap();
+        faulty_dec_share_index.decryptor_index += 1;
+        assert!(!faulty_dec_share_index.verify_share(&ciphertext, ad, &svp));
+
+        let mut faulty_dec_share = privkeys[0].create_share(&ciphertext, ad).unwrap();
+        faulty_dec_share.decryption_share = -faulty_dec_share.decryption_share;
+        assert!(!faulty_dec_share.verify_share(&ciphertext, ad, &svp));
+
+
+        ciphertext.auth_tag = -ciphertext.auth_tag;
+        assert!(privkeys[0].create_share(&ciphertext, ad).is_err());
+
+        assert!(share_combine(ciphertext, ad, dec_shares).is_err());
     }
 }
