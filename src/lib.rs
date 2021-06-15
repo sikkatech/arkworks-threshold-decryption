@@ -98,7 +98,7 @@ pub struct DecryptionShare<P: ThresholdEncryptionParameters> {
     pub decryption_share: G1<P>, // U_i = x_i*U
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum ThresholdEncryptionError {
     /// Error
     #[error("ciphertext verification failed")]
