@@ -125,7 +125,6 @@ fn construct_tag_hash<P: ThresholdEncryptionParameters>(
     additional_data: &[u8],
 ) -> G2<P> {
     // Encode the data to be hashed as U || V || additional data
-    // TODO: Length prefix V
     let mut hash_input = Vec::<u8>::new();
     u.write(&mut hash_input).unwrap();
     hash_input.extend_from_slice(stream_ciphertext);
@@ -141,7 +140,6 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         additional_data: &[u8],
         rng: &mut R,
     ) -> Ciphertext<P> {
-        // TODO: Come back and rename these
         let g1_generator = G1::<P>::prime_subgroup_generator();
         let r = Fr::<P>::rand(rng);
         let u = g1_generator.mul(r).into();
@@ -151,7 +149,6 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
         let stream_cipher_key_curve_elem = self.key.mul(r).into();
 
         // Convert this to stream cipher element into a key for the stream cipher
-        // TODO: Use stream cipher Trait
         let mut prf_key = Vec::new();
         stream_cipher_key_curve_elem.write(&mut prf_key).unwrap();
 
@@ -198,7 +195,6 @@ impl<P: ThresholdEncryptionParameters> EncryptionPubkey<P> {
 }
 
 impl<P: ThresholdEncryptionParameters> Ciphertext<P> {
-    // TODO: Change this output to an enum
     /// Check that the provided ciphertext is validly constructed, and therefore is decryptable.
     pub fn check_ciphertext_validity(&self, additional_data: &[u8]) -> bool {
         // The authentication tag is valid iff e(nonce, tag hash) = e(g, auth tag)
@@ -384,8 +380,6 @@ pub fn batch_share_combine<'a, P: 'static + ThresholdEncryptionParameters>(
         .collect_into_vec(&mut pairing_product);
 
     for (c, ad) in ciphertexts.iter().zip(additional_data.iter()) {
-        // let tag_hash = construct_tag_hash::<P>(c.nonce, &c.ciphertext[..], ad);
-        // pairing_product.push((c.nonce.into(), tag_hash.into()));
         auth_tag_sum = auth_tag_sum + c.auth_tag;
     }
     pairing_product.push((g_inv.into(), auth_tag_sum.into()));
