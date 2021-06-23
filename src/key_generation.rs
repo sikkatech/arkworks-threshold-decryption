@@ -53,11 +53,3 @@ pub fn generate_keys<P: ThresholdEncryptionParameters, R: RngCore>(
 
     (encryption_pubkey, verification_pubkey, privkeys)
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}

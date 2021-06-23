@@ -13,10 +13,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: rustlang/rust:nightly
+      image: rust:latest
     steps:
     - uses: actions/checkout@v2
     - name: Build
       run: cargo build --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: RUST_BACKTRACE=full cargo test  --  --show-output --nocapture
