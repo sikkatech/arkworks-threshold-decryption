@@ -61,16 +61,6 @@ pub fn bench_decryption(c: &mut Criterion) {
             threshold, threshold, &mut rng,
         );
 
-        let msg: &[u8] = "abc".as_bytes();
-        let ad: &[u8] = "".as_bytes();
-        let ciphertext = epk.encrypt_msg(msg, ad, &mut rng);
-
-        let mut dec_shares: Vec<DecryptionShare<TestingParameters>> = Vec::new();
-        for i in 0..threshold {
-            dec_shares.push(privkeys[i].create_share(&ciphertext, ad).unwrap());
-            dec_shares[i].verify_share(&ciphertext, ad, &svp);
-        }
-
         let mut messages: Vec<[u8; NUM_OF_TX]> = vec![];
         let mut ad: Vec<&[u8]> = vec![];
         let mut ciphertexts: Vec<Ciphertext<TestingParameters>> = vec![];
